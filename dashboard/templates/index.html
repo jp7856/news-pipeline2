@@ -340,20 +340,25 @@
           <div class="img-preview" id="img-preview-wrap">${imgHtml}</div>
           <div class="img-info">
             <p id="img-url-text">${imgUrl ? esc(imgUrl) : "이미지를 찾지 못했습니다."}</p>
-            <a class="btn-search" href="https://jp7856.github.io/imazine/" target="imazine-popup"
-               onclick="openImazine(event)">검색</a>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <a class="btn-search" href="https://jp7856.github.io/imazine/" target="imazine-popup"
+                 onclick="openImazine(event, 'https://jp7856.github.io/imazine/')">이미지 V1</a>
+              <a class="btn-search" href="https://jp7856.github.io/ne-times-image-finder/" target="imazine-popup"
+                 style="background:#3b82f6"
+                 onclick="openImazine(event, 'https://jp7856.github.io/ne-times-image-finder/')">이미지 V2</a>
+            </div>
             <p style="margin-top:12px;font-size:.8rem;color:#475569">
-              imazine에서 이미지를 선택하면 자동으로 업데이트됩니다.
+              이미지를 선택하면 자동으로 업데이트됩니다.
             </p>
           </div>
         </div>
       `;
     }
 
-    function openImazine(e) {
+    function openImazine(e, url) {
       e.preventDefault();
       _imazinePopup = window.open(
-        "https://jp7856.github.io/imazine/",
+        url,
         "imazine-popup",
         "width=1000,height=700,left=200,top=100"
       );
