@@ -136,6 +136,9 @@ class ContentPackage:
     crossword_sentences: list[CrosswordSentencePair]
     workbook_sets: list[WorkbookSet]       # 반드시 2세트
 
+    # Agent 3: 이미지
+    image_url: str = ""
+
 
 # ============================================================
 # 파이프라인 실행 모델

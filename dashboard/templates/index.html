@@ -78,6 +78,23 @@
     #log-box{height:200px;overflow-y:auto;font-family:monospace;font-size:.8rem;line-height:1.5;color:#a3e635;background:#0f172a;border-radius:8px;padding:12px}
     #log-box p{margin:1px 0}
 
+    /* Image panel */
+    .img-panel{display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap}
+    .img-preview{flex:0 0 auto}
+    .img-preview img{width:340px;max-width:100%;border-radius:10px;cursor:pointer;border:2px solid #334155;transition:border-color .2s}
+    .img-preview img:hover{border-color:#3b82f6}
+    .img-no-image{width:340px;height:220px;background:#0f172a;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#475569;font-size:.85rem;border:2px dashed #334155}
+    .img-info{flex:1;min-width:200px}
+    .img-info p{font-size:.85rem;color:#94a3b8;word-break:break-all;margin-bottom:12px}
+    .btn-search{background:#f59e0b;color:#0f172a;padding:10px 20px;border:none;border-radius:8px;cursor:pointer;font-size:.9rem;font-weight:600;text-decoration:none;display:inline-block}
+    .btn-search:hover{background:#fbbf24}
+
+    /* Lightbox */
+    #lightbox{display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:1000;align-items:center;justify-content:center}
+    #lightbox.open{display:flex}
+    #lightbox img{max-width:90vw;max-height:90vh;border-radius:10px}
+    #lightbox-close{position:absolute;top:20px;right:28px;color:#fff;font-size:2rem;cursor:pointer;line-height:1}
+
     .hidden{display:none}
   </style>
 </head>
@@ -115,6 +132,7 @@
         <div class="tab" data-tab="editing">Editing</div>
         <div class="tab" data-tab="crossword">Crossword</div>
         <div class="tab" data-tab="workbook">Workbook</div>
+        <div class="tab" data-tab="image">Image</div>
       </div>
 
       <div class="panel active" id="panel-article"></div>
@@ -123,8 +141,15 @@
       <div class="panel" id="panel-editing"></div>
       <div class="panel" id="panel-crossword"></div>
       <div class="panel" id="panel-workbook"></div>
+      <div class="panel" id="panel-image"></div>
     </div>
   </main>
+
+  <!-- Lightbox -->
+  <div id="lightbox" onclick="closeLightbox()">
+    <span id="lightbox-close">&times;</span>
+    <img id="lightbox-img" src="" alt="">
+  </div>
 
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
   <script>
@@ -291,12 +316,76 @@
         <h2>Workbook Activities <span class="stat">${r.workbook.length} sets</span></h2>
         ${wbHtml}
       `;
+
+      // Image
+      renderImagePanel(r);
     }
 
     function esc(s) {
       if (!s) return "";
       return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
     }
+
+    // ── Image panel ──────────────────────────────────────────────
+    let _imazinePopup = null;
+
+    function renderImagePanel(r) {
+      const imgUrl = r.image_url || "";
+      const imgHtml = imgUrl
+        ? `<img id="selected-image" src="${esc(imgUrl)}" alt="article image" onclick="openLightbox(this.src)">`
+        : `<div class="img-no-image">이미지 없음</div>`;
+      document.getElementById("panel-image").innerHTML = `
+        <h2>Image <span class="stat" id="image-source-badge">${imgUrl ? "자동선택" : "없음"}</span></h2>
+        <div class="img-panel">
+          <div class="img-preview" id="img-preview-wrap">${imgHtml}</div>
+          <div class="img-info">
+            <p id="img-url-text">${imgUrl ? esc(imgUrl) : "이미지를 찾지 못했습니다."}</p>
+            <a class="btn-search" href="https://jp7856.github.io/imazine/" target="imazine-popup"
+               onclick="openImazine(event)">검색</a>
+            <p style="margin-top:12px;font-size:.8rem;color:#475569">
+              imazine에서 이미지를 선택하면 자동으로 업데이트됩니다.
+            </p>
+          </div>
+        </div>
+      `;
+    }
+
+    function openImazine(e) {
+      e.preventDefault();
+      _imazinePopup = window.open(
+        "https://jp7856.github.io/imazine/",
+        "imazine-popup",
+        "width=1000,height=700,left=200,top=100"
+      );
+    }
+
+    // imazine에서 선택한 이미지 수신
+    window.addEventListener("message", (event) => {
+      if (!event.data || !event.data.imageUrl) return;
+      const url = event.data.imageUrl;
+      updateSelectedImage(url, "imazine 선택");
+      if (_imazinePopup && !_imazinePopup.closed) _imazinePopup.close();
+    });
+
+    function updateSelectedImage(url, badge) {
+      const wrap = document.getElementById("img-preview-wrap");
+      const urlText = document.getElementById("img-url-text");
+      const badgeEl = document.getElementById("image-source-badge");
+      if (!wrap) return;
+      wrap.innerHTML = `<img id="selected-image" src="${esc(url)}" alt="article image" onclick="openLightbox(this.src)">`;
+      if (urlText) urlText.textContent = url;
+      if (badgeEl) { badgeEl.textContent = badge; badgeEl.style.background = "#1e3a5f"; badgeEl.style.color = "#93c5fd"; }
+    }
+
+    // ── Lightbox ─────────────────────────────────────────────────
+    function openLightbox(src) {
+      document.getElementById("lightbox-img").src = src;
+      document.getElementById("lightbox").classList.add("open");
+    }
+    function closeLightbox() {
+      document.getElementById("lightbox").classList.remove("open");
+    }
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeLightbox(); });
   </script>
 </body>
 </html>

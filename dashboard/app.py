@@ -138,6 +138,7 @@ def _serialize(pkg: ContentPackage) -> dict:
             }
             for w in pkg.workbook_sets
         ],
+        "image_url": pkg.image_url,
     }
 
 

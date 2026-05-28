@@ -6,7 +6,7 @@ from typing import Callable
 import requests
 
 from config import GOOGLE_CSE_API_KEY, GOOGLE_CSE_ID
-from models import Article, ArticleStatus
+from models import ContentPackage
 
 logger = logging.getLogger(__name__)
 
@@ -17,31 +17,30 @@ class ImageFinderAgent:
     def __init__(self, log_callback: Callable[[str], None] | None = None):
         self._log = log_callback or (lambda msg: logger.info(msg))
 
-    def run(self, articles: list[Article]) -> list[Article]:
-        """각 기사에 맞는 이미지 URL을 찾아 채운다."""
-        self._log(f"[Agent3] 이미지 탐색 시작: {len(articles)}건")
-        for article in articles:
-            if article.status == ArticleStatus.ERROR:
-                continue
-            try:
-                url = self._find_image(article.title_ko or article.title)
-                article.image_url = url or ""
-                if url:
-                    self._log(f"[Agent3] 이미지 발견: {article.title[:30]}...")
-                else:
-                    self._log(f"[Agent3] 이미지 없음: {article.title[:30]}...")
-                if article.status != ArticleStatus.ERROR:
-                    article.status = ArticleStatus.IMAGE_FOUND
-            except Exception as e:
-                self._log(f"[Agent3] 이미지 오류 ({article.id}): {e}")
+    def run(self, package: ContentPackage) -> ContentPackage:
+        self._log("[Agent3] 이미지 탐색 시작")
+        query = self._build_query(package)
+        self._log(f"[Agent3] 검색어: {query}")
+        try:
+            url = self._search_image(query)
+            if url:
+                package.image_url = url
+                self._log(f"[Agent3] 이미지 발견: {url[:80]}...")
+            else:
+                self._log("[Agent3] 이미지를 찾지 못했습니다.")
+        except Exception as e:
+            self._log(f"[Agent3] 이미지 탐색 오류: {e}")
         self._log("[Agent3] 이미지 탐색 완료")
-        return articles
+        return package
 
     # ------------------------------------------------------------------
 
-    def _find_image(self, query: str) -> str | None:
+    def _build_query(self, package: ContentPackage) -> str:
+        """topic + 섹션으로 뉴스형 이미지 검색어를 구성한다."""
+        return f"{package.topic} {package.section.value} news"
+
+    def _search_image(self, query: str) -> str | None:
         if not GOOGLE_CSE_API_KEY or not GOOGLE_CSE_ID:
-            # API 키 없을 때 빈 문자열 반환 (실패 아님)
             return None
 
         params = {
@@ -51,6 +50,7 @@ class ImageFinderAgent:
             "searchType": "image",
             "num": 1,
             "safe": "active",
+            "imgType": "news",
         }
         resp = requests.get(SEARCH_URL, params=params, timeout=10)
         resp.raise_for_status()
