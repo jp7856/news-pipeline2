@@ -51,8 +51,10 @@ def api_run():
     section_str = data.get("section", "환경")
     source_url = data.get("source_url", "").strip()
 
+    if not topic and not source_url:
+        return jsonify({"error": "Topic or source URL is required."}), 400
     if not topic:
-        return jsonify({"error": "Topic is required."}), 400
+        topic = source_url  # URL만 있으면 URL을 토픽으로 사용
     if _running.get(sid):
         return jsonify({"error": "Pipeline already running."}), 409
 

@@ -231,8 +231,10 @@
 
     async function runPipeline() {
       if (_clientRunning) return;
-      const topic = document.getElementById("topic").value.trim();
-      if (!topic) { alert("Please enter a topic."); return; }
+      const sourceUrl = document.getElementById("source-url").value.trim();
+      let topic = document.getElementById("topic").value.trim();
+      if (!topic && !sourceUrl) { alert("Please enter a topic."); return; }
+      if (!topic) topic = sourceUrl; // URL만 있으면 URL을 토픽으로 사용
 
       _clientRunning = true;
       setRunning(true);
