@@ -34,7 +34,12 @@ class ImageFinderAgent:
         return package
 
     def _build_query(self, package: ContentPackage) -> str:
-        return f"{package.topic} {package.section.value}"
+        # 영어 어휘가 있으면 우선 사용 (한국어 토픽은 Unsplash 검색 안 됨)
+        if package.article.vocabulary:
+            keywords = " ".join(package.article.vocabulary[:4])
+            return keywords
+        # 폴백: 토픽이 영어인 경우
+        return package.topic
 
     def _search_image(self, query: str) -> str | None:
         if not UNSPLASH_ACCESS_KEY:
