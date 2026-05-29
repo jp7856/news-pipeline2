@@ -30,6 +30,7 @@ class WriterAgent:
         level: Level,
         section: Section,
         reference_format: str = "",
+        source_content: str = "",
     ) -> ArticleResult:
         """
         topic : 기사 주제 또는 뉴스 URL
@@ -45,8 +46,14 @@ class WriterAgent:
             if reference_format
             else ""
         )
+        source_hint = (
+            f"\n\nSource article (use as factual reference — do NOT copy directly):\n{source_content[:2000]}"
+            if source_content
+            else ""
+        )
 
         prompt = f"""You are writing an article for {cfg['newspaper']}.
+{source_hint}
 
 Topic: {topic}
 Section: {section.value}

@@ -33,6 +33,7 @@ class Orchestrator:
         topic: str,
         level: Level,
         section: Section,
+        source_url: str = "",
     ) -> ContentPackage:
         """
         단건 콘텐츠 제작 파이프라인을 실행한다.
@@ -52,7 +53,7 @@ class Orchestrator:
 
         # ── Agent 1: 콘텐츠 제작 ──────────────────────────────────
         producer = ContentProducerAgent(log_callback=self._log)
-        package = producer.run(topic, level, section)
+        package = producer.run(topic, level, section, source_url=source_url)
 
         # ── Agent 2: 한국어 번역 ──────────────────────────────────
         translator = TranslatorAgent(log_callback=self._log)

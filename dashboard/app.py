@@ -49,6 +49,7 @@ def api_run():
     topic = data.get("topic", "").strip()
     level_str = data.get("level", "junior")
     section_str = data.get("section", "환경")
+    source_url = data.get("source_url", "").strip()
 
     if not topic:
         return jsonify({"error": "Topic is required."}), 400
@@ -63,7 +64,7 @@ def api_run():
 
     _running[sid] = True
     thread = threading.Thread(
-        target=_run_pipeline, args=(sid, topic, level, section), daemon=True
+        target=_run_pipeline, args=(sid, topic, level, section, source_url), daemon=True
     )
     thread.start()
     return jsonify({"message": "Pipeline started"})
@@ -81,13 +82,13 @@ def api_history_item(idx):
     return jsonify(_history[idx])
 
 
-def _run_pipeline(sid: str, topic: str, level: Level, section: Section):
+def _run_pipeline(sid: str, topic: str, level: Level, section: Section, source_url: str = ""):
     try:
         def emit_log(msg: str):
             socketio.emit("log", {"message": msg}, to=sid)
 
         orchestrator = Orchestrator(log_callback=emit_log)
-        pkg, sheet_url = orchestrator.run(topic, level, section)
+        pkg, sheet_url = orchestrator.run(topic, level, section, source_url=source_url)
         result = _serialize(pkg, sheet_url)
 
         # 히스토리에 저장

@@ -43,7 +43,7 @@ class ContentProducerAgent:
         self._crossword = CrosswordAgent(self._client, log_callback=self._log)
         self._workbook  = WorkbookAgent(self._client, log_callback=self._log)
 
-    def run(self, topic: str, level: Level, section: Section) -> ContentPackage:
+    def run(self, topic: str, level: Level, section: Section, source_url: str = "") -> ContentPackage:
         """
         topic   : 기사 주제 (자유 텍스트) 또는 뉴스 URL
         level   : Level.KINDER / KIDS / JUNIOR / TIMES
@@ -54,8 +54,17 @@ class ContentProducerAgent:
         # NE Times 포맷 참고 (캐시 활용)
         reference = self._get_reference_format()
 
+        # 링크가 있으면 원문 스크래핑
+        source_content = ""
+        if source_url:
+            source_content = self._scrape_article(source_url)
+
         # ── Step 1: 기사 작성 ─────────────────────────────────────
-        article = self._writer.run(topic, level, section, reference_format=reference)
+        article = self._writer.run(
+            topic, level, section,
+            reference_format=reference,
+            source_content=source_content,
+        )
 
         # ── Step 2: 표절 검사 ─────────────────────────────────────
         plagiarism_report = self._plagcheck.run(article)
@@ -68,7 +77,11 @@ class ContentProducerAgent:
                 f"{plagiarism_report.notes}. "
                 f"Please rewrite with stronger paraphrasing and structural originality."
             )
-            article = self._writer.run(revised_topic, level, section, reference_format=reference)
+            article = self._writer.run(
+                revised_topic, level, section,
+                reference_format=reference,
+                source_content=source_content,
+            )
             plagiarism_report = self._plagcheck.run(article)
 
         # ── Step 3: 교정 ──────────────────────────────────────────
@@ -99,6 +112,30 @@ class ContentProducerAgent:
         )
 
     # ------------------------------------------------------------------
+
+    def _scrape_article(self, url: str) -> str:
+        """URL에서 기사 본문을 추출한다."""
+        self._log(f"[Agent1] 링크 스크래핑 시작: {url[:80]}")
+        try:
+            resp = requests.get(url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
+            soup = BeautifulSoup(resp.text, "lxml")
+
+            # 스크립트·스타일 제거
+            for tag in soup(["script", "style", "nav", "footer", "header"]):
+                tag.decompose()
+
+            # 본문 단락 추출
+            paragraphs = [
+                p.get_text(strip=True)
+                for p in soup.find_all("p")
+                if len(p.get_text(strip=True)) > 40
+            ]
+            content = "\n\n".join(paragraphs[:30])
+            self._log(f"[Agent1] 스크래핑 완료 — {len(content)}자")
+            return content[:3000]  # 토큰 절약을 위해 최대 3000자
+        except Exception as e:
+            self._log(f"[Agent1] 스크래핑 실패 (무시하고 계속): {e}")
+            return ""
 
     def _get_reference_format(self) -> str:
         """netimes.co.kr에서 샘플 기사 텍스트를 가져온다 (세션 중 1회 캐시)."""
