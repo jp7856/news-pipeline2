@@ -89,6 +89,20 @@
     .btn-search{background:#f59e0b;color:#0f172a;padding:10px 20px;border:none;border-radius:8px;cursor:pointer;font-size:.9rem;font-weight:600;text-decoration:none;display:inline-block}
     .btn-search:hover{background:#fbbf24}
 
+    /* History modal */
+    #history-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:900;align-items:flex-start;justify-content:center;padding-top:60px}
+    #history-modal.open{display:flex}
+    .history-box{background:#1e293b;border-radius:12px;width:640px;max-width:95vw;max-height:80vh;display:flex;flex-direction:column;border:1px solid #334155}
+    .history-header{padding:16px 20px;border-bottom:1px solid #334155;display:flex;align-items:center;justify-content:space-between}
+    .history-header h3{font-size:.95rem;font-weight:600}
+    .history-close{background:none;border:none;color:#94a3b8;font-size:1.4rem;cursor:pointer;padding:0}
+    .history-list{overflow-y:auto;flex:1;padding:12px}
+    .history-item{padding:10px 12px;border-radius:8px;cursor:pointer;display:flex;gap:12px;align-items:center;border:1px solid transparent}
+    .history-item:hover{background:#0f172a;border-color:#334155}
+    .hi-badge{font-size:.7rem;padding:3px 8px;border-radius:999px;background:#334155;white-space:nowrap}
+    .hi-topic{font-size:.9rem;font-weight:500;flex:1}
+    .hi-meta{font-size:.75rem;color:#64748b;white-space:nowrap}
+
     /* Lightbox */
     #lightbox{display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:1000;align-items:center;justify-content:center}
     #lightbox.open{display:flex}
@@ -118,6 +132,7 @@
         {% endfor %}
       </select>
       <button id="btn-run" onclick="runPipeline()">Generate</button>
+      <button style="background:#1e293b;color:#94a3b8;border:1px solid #334155" onclick="openHistory()">모두 보기</button>
     </div>
 
     <!-- Log -->
@@ -147,6 +162,17 @@
     </div>
   </main>
 
+  <!-- History modal -->
+  <div id="history-modal" onclick="if(event.target===this)closeHistory()">
+    <div class="history-box">
+      <div class="history-header">
+        <h3>전체 검색 히스토리</h3>
+        <button class="history-close" onclick="closeHistory()">&times;</button>
+      </div>
+      <div class="history-list" id="history-list"></div>
+    </div>
+  </div>
+
   <!-- Lightbox -->
   <div id="lightbox" onclick="closeLightbox()">
     <span id="lightbox-close">&times;</span>
@@ -159,6 +185,9 @@
     const logBox = document.getElementById("log-box");
     const badge = document.getElementById("status-badge");
     const btnRun = document.getElementById("btn-run");
+    let _mySid = "";
+
+    socket.on("connect", () => { _mySid = socket.id; });
 
     // Tab switching
     document.querySelectorAll(".tab").forEach(tab => {
@@ -210,6 +239,7 @@
           topic,
           level: document.getElementById("level").value,
           section: document.getElementById("section").value,
+          sid: _mySid,
         }),
       });
       if (!resp.ok) {
@@ -415,7 +445,42 @@
     function closeLightbox() {
       document.getElementById("lightbox").classList.remove("open");
     }
-    document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeLightbox(); });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeLightbox(); closeHistory(); } });
+
+    // ── History ───────────────────────────────────────────────────
+    async function openHistory() {
+      const res = await fetch("/api/history");
+      const list = await res.json();
+      const el = document.getElementById("history-list");
+      if (list.length === 0) {
+        el.innerHTML = '<p style="padding:20px;color:#475569;font-size:.85rem">아직 생성된 콘텐츠가 없습니다.</p>';
+      } else {
+        el.innerHTML = [...list].reverse().map(h => `
+          <div class="history-item" onclick="loadHistory(${h.idx})">
+            <span class="hi-badge">${h.level.toUpperCase()}</span>
+            <span class="hi-badge" style="background:#1e3a5f;color:#93c5fd">${h.section}</span>
+            <span class="hi-topic">${esc(h.topic)}</span>
+            <span class="hi-meta">${h.created_at}</span>
+          </div>`).join("");
+      }
+      document.getElementById("history-modal").classList.add("open");
+    }
+
+    function closeHistory() {
+      document.getElementById("history-modal").classList.remove("open");
+    }
+
+    async function loadHistory(idx) {
+      const res = await fetch(`/api/history/${idx}`);
+      const entry = await res.json();
+      closeHistory();
+      document.getElementById("result-area").classList.remove("hidden");
+      renderResult(entry.result);
+      document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+      document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
+      document.querySelector('[data-tab="article"]').classList.add("active");
+      document.getElementById("panel-article").classList.add("active");
+    }
   </script>
 </body>
 </html>

@@ -3,11 +3,11 @@
 import sys
 import threading
 import logging
-from dataclasses import asdict
+from datetime import datetime
 from pathlib import Path
 
 from flask import Flask, render_template, jsonify, request
-from flask_socketio import SocketIO
+from flask_socketio import SocketIO, join_room
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from orchestrator import Orchestrator
@@ -21,7 +21,6 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 
 @app.after_request
 def add_no_cache(response):
-    """브라우저 캐시 방지 — 항상 최신 템플릿을 전달."""
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
@@ -29,8 +28,11 @@ def add_no_cache(response):
 
 logger = logging.getLogger(__name__)
 
-_last_result: ContentPackage | None = None
-_is_running = False
+# sid → 현재 실행 중 여부
+_running: dict[str, bool] = {}
+
+# 전체 히스토리 (모두 보기용)
+_history: list[dict] = []
 
 
 @app.route("/")
@@ -40,27 +42,18 @@ def index():
     return render_template("index.html", levels=levels, sections=sections)
 
 
-@app.route("/api/status")
-def api_status():
-    return jsonify({
-        "is_running": _is_running,
-        "has_result": _last_result is not None,
-    })
-
-
 @app.route("/api/run", methods=["POST"])
 def api_run():
-    global _is_running
-    if _is_running:
-        return jsonify({"error": "Pipeline already running."}), 409
-
     data = request.json
+    sid = data.get("sid", "")
     topic = data.get("topic", "").strip()
     level_str = data.get("level", "junior")
     section_str = data.get("section", "환경")
 
     if not topic:
         return jsonify({"error": "Topic is required."}), 400
+    if _running.get(sid):
+        return jsonify({"error": "Pipeline already running."}), 409
 
     try:
         level = Level(level_str)
@@ -68,33 +61,53 @@ def api_run():
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
 
-    _is_running = True
-    thread = threading.Thread(target=_run_pipeline, args=(topic, level, section), daemon=True)
+    _running[sid] = True
+    thread = threading.Thread(
+        target=_run_pipeline, args=(sid, topic, level, section), daemon=True
+    )
     thread.start()
     return jsonify({"message": "Pipeline started"})
 
 
-@app.route("/api/result")
-def api_result():
-    if _last_result is None:
-        return jsonify({"error": "No result yet."}), 404
-    return jsonify(_serialize(_last_result))
+@app.route("/api/history")
+def api_history():
+    return jsonify(_history)
 
 
-def _run_pipeline(topic: str, level: Level, section: Section):
-    global _last_result, _is_running
+@app.route("/api/history/<int:idx>")
+def api_history_item(idx):
+    if idx < 0 or idx >= len(_history):
+        return jsonify({"error": "Not found"}), 404
+    return jsonify(_history[idx])
+
+
+def _run_pipeline(sid: str, topic: str, level: Level, section: Section):
     try:
         def emit_log(msg: str):
-            socketio.emit("log", {"message": msg})
+            socketio.emit("log", {"message": msg}, to=sid)
 
         orchestrator = Orchestrator(log_callback=emit_log)
-        _last_result = orchestrator.run(topic, level, section)
-        socketio.emit("pipeline_done", {"result": _serialize(_last_result)})
+        pkg = orchestrator.run(topic, level, section)
+        result = _serialize(pkg)
+
+        # 히스토리에 저장
+        entry = {
+            "idx": len(_history),
+            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "topic": topic,
+            "level": level.value,
+            "section": section.value,
+            "result": result,
+        }
+        _history.append(entry)
+
+        # 요청한 사람에게만 결과 전송
+        socketio.emit("pipeline_done", {"result": result}, to=sid)
     except Exception as e:
-        socketio.emit("log", {"message": f"FATAL ERROR: {e}"})
-        socketio.emit("pipeline_error", {"error": str(e)})
+        socketio.emit("log", {"message": f"FATAL ERROR: {e}"}, to=sid)
+        socketio.emit("pipeline_error", {"error": str(e)}, to=sid)
     finally:
-        _is_running = False
+        _running.pop(sid, None)
 
 
 def _serialize(pkg: ContentPackage) -> dict:
