@@ -382,6 +382,7 @@
     // ── Image panels ─────────────────────────────────────────────
     let _imazinePopup = null;
     let _currentImageUrl = "";
+    let _currentArticleText = "";
 
     function _imagePreviewHtml(imgUrl, wrapId, badgeId, urlId) {
       const imgHtml = imgUrl
@@ -399,6 +400,7 @@
 
     function renderImageV1(r) {
       _currentImageUrl = r.image_url || "";
+      _currentArticleText = r.article?.text || "";
       document.getElementById("panel-image-v1").innerHTML = `
         <h2>이미지 V1 — 검색어 생성기</h2>
         ${_imagePreviewHtml(_currentImageUrl, "img-wrap-v1", "img-badge-v1", "img-url-v1")}
@@ -431,13 +433,25 @@
       _imazinePopup = window.open(url, "imazine-popup", "width=1000,height=700,left=200,top=100");
     }
 
-    // 이미지 사이트에서 선택한 이미지 수신
+    // 팝업 ↔ 대시보드 메시지 처리
     window.addEventListener("message", (event) => {
-      if (!event.data || !event.data.imageUrl) return;
-      _currentImageUrl = event.data.imageUrl;
-      _applyImage("img-wrap-v1", "img-badge-v1", "img-url-v1");
-      _applyImage("img-wrap-v2", "img-badge-v2", "img-url-v2");
-      if (_imazinePopup && !_imazinePopup.closed) _imazinePopup.close();
+      if (!event.data) return;
+
+      // 팝업이 준비됐다고 알려오면 기사 본문 전송
+      if (event.data.type === "ready") {
+        if (_imazinePopup && !_imazinePopup.closed) {
+          _imazinePopup.postMessage({ type: "prefill", text: _currentArticleText }, "*");
+        }
+        return;
+      }
+
+      // 팝업에서 이미지 선택 수신
+      if (event.data.imageUrl) {
+        _currentImageUrl = event.data.imageUrl;
+        _applyImage("img-wrap-v1", "img-badge-v1", "img-url-v1");
+        _applyImage("img-wrap-v2", "img-badge-v2", "img-url-v2");
+        if (_imazinePopup && !_imazinePopup.closed) _imazinePopup.close();
+      }
     });
 
     function _applyImage(wrapId, badgeId, urlId) {
