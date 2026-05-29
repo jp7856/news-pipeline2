@@ -1,13 +1,15 @@
-"""Agent 4: 워크시트 저장 — Google Sheets에 기사 데이터를 기록한다."""
+"""Agent 4: Google Sheets 저장 — ContentPackage를 스프레드시트에 기록한다."""
 
+import json
 import logging
+import os
 from typing import Callable
 
 import gspread
 from google.oauth2.service_account import Credentials
 
-from config import GOOGLE_SHEETS_CREDENTIALS_JSON, GOOGLE_SHEET_ID, SHEET_COLUMNS
-from models import Article, ArticleStatus
+from config import GOOGLE_SHEETS_CREDENTIALS_JSON, GOOGLE_SHEET_ID
+from models import ContentPackage
 
 logger = logging.getLogger(__name__)
 
@@ -16,60 +18,55 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive",
 ]
 
+SHEET_COLUMNS = [
+    "생성일시", "레벨", "섹션", "토픽", "단어수",
+    "기사(영문)", "기사(한국어)", "요약(한국어)",
+    "어휘", "출처", "표절검사", "이미지URL",
+    "크로스워드", "워크북Set1", "워크북Set2",
+]
+
 
 class WorksheetAgent:
     def __init__(self, log_callback: Callable[[str], None] | None = None):
         self._log = log_callback or (lambda msg: logger.info(msg))
         self._sheet = None
 
-    def run(self, articles: list[Article]) -> list[Article]:
-        """기사 데이터를 Google Sheets에 저장하고 행 번호를 article에 기록한다."""
+    def run(self, package: ContentPackage) -> tuple[ContentPackage, str]:
+        """
+        ContentPackage를 Google Sheets에 저장한다.
+        Returns: (package, sheet_url)
+        """
         self._log("[Agent4] Google Sheets 저장 시작")
+        sheet_url = ""
         try:
             sheet = self._get_sheet()
             self._ensure_header(sheet)
-
-            for article in articles:
-                if article.status == ArticleStatus.ERROR:
-                    continue
-                try:
-                    row = self._article_to_row(article)
-                    result = sheet.append_row(row, value_input_option="USER_ENTERED")
-                    # 저장된 행 번호 기록
-                    updated_range = result.get("updates", {}).get("updatedRange", "")
-                    article.sheet_row = self._parse_row_number(updated_range)
-                    article.status = ArticleStatus.SHEET_SAVED
-                    self._log(f"[Agent4] 저장 완료: {article.title_ko or article.title}")
-                except Exception as e:
-                    self._log(f"[Agent4] 저장 오류 ({article.id}): {e}")
-                    article.status = ArticleStatus.ERROR
+            row = self._package_to_row(package)
+            sheet.append_row(row, value_input_option="USER_ENTERED")
+            sheet_url = f"https://docs.google.com/spreadsheets/d/{GOOGLE_SHEET_ID}"
+            self._log(f"[Agent4] 저장 완료 → {sheet_url}")
         except Exception as e:
-            self._log(f"[Agent4] 시트 연결 오류: {e}")
-
-        self._log("[Agent4] 저장 완료")
-        return articles
-
-    def update_status(self, article: Article) -> None:
-        """Agent 5 검수 후 시트의 '상태' 컬럼을 업데이트한다."""
-        if article.sheet_row is None:
-            return
-        try:
-            sheet = self._get_sheet()
-            status_col = SHEET_COLUMNS.index("상태") + 1
-            sheet.update_cell(article.sheet_row, status_col, article.status.value)
-        except Exception as e:
-            self._log(f"[Agent4] 상태 업데이트 오류: {e}")
+            self._log(f"[Agent4] 저장 오류: {e}")
+        return package, sheet_url
 
     # ------------------------------------------------------------------
 
     def _get_sheet(self) -> gspread.Worksheet:
-        if self._sheet is None:
-            creds = Credentials.from_service_account_file(
-                GOOGLE_SHEETS_CREDENTIALS_JSON, scopes=SCOPES
-            )
-            gc = gspread.authorize(creds)
-            spreadsheet = gc.open_by_key(GOOGLE_SHEET_ID)
-            self._sheet = spreadsheet.sheet1
+        if self._sheet is not None:
+            return self._sheet
+
+        # Railway env var는 JSON 문자열, 로컬은 파일 경로 둘 다 지원
+        creds_val = GOOGLE_SHEETS_CREDENTIALS_JSON
+        try:
+            creds_dict = json.loads(creds_val)
+            creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
+        except (json.JSONDecodeError, TypeError):
+            # 파일 경로로 시도
+            creds = Credentials.from_service_account_file(creds_val, scopes=SCOPES)
+
+        gc = gspread.authorize(creds)
+        spreadsheet = gc.open_by_key(GOOGLE_SHEET_ID)
+        self._sheet = spreadsheet.sheet1
         return self._sheet
 
     def _ensure_header(self, sheet: gspread.Worksheet) -> None:
@@ -77,29 +74,41 @@ class WorksheetAgent:
         if first_row != SHEET_COLUMNS:
             sheet.insert_row(SHEET_COLUMNS, index=1)
 
-    def _article_to_row(self, article: Article) -> list:
-        return [
-            article.id,
-            article.collected_at.strftime("%Y-%m-%d %H:%M:%S"),
-            article.level.value,
-            article.section.value,
-            article.title,
-            article.title_ko,
-            article.url,
-            article.summary_en,
-            article.summary_ko,
-            article.image_url,
-            article.source,
-            article.status.value,
-        ]
+    def _package_to_row(self, pkg: ContentPackage) -> list:
+        from datetime import datetime
 
-    @staticmethod
-    def _parse_row_number(updated_range: str) -> int | None:
-        # 예: "시트1!A5:J5" → 5
-        try:
-            cell_part = updated_range.split("!")[-1]
-            import re
-            numbers = re.findall(r"\d+", cell_part)
-            return int(numbers[0]) if numbers else None
-        except Exception:
-            return None
+        crossword = json.dumps(
+            [{"word": c.word, "ko": c.korean_definition,
+              "b1": c.sentence_b1, "b1b2": c.sentence_b1_b2}
+             for c in pkg.crossword_sentences],
+            ensure_ascii=False
+        )
+
+        def wb_json(ws):
+            return json.dumps({
+                "vocab": ws.vocabulary_activity,
+                "true_false": ws.true_false,
+                "comprehension": ws.comprehension_questions,
+                "discussion": ws.discussion_questions,
+            }, ensure_ascii=False)
+
+        wb1 = wb_json(pkg.workbook_sets[0]) if len(pkg.workbook_sets) > 0 else ""
+        wb2 = wb_json(pkg.workbook_sets[1]) if len(pkg.workbook_sets) > 1 else ""
+
+        return [
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            pkg.level.value,
+            pkg.section.value,
+            pkg.topic,
+            pkg.article.word_count,
+            pkg.article.text,
+            pkg.article.text_ko,
+            pkg.article.summary_ko,
+            ", ".join(pkg.article.vocabulary),
+            "\n".join(pkg.article.sources),
+            "PASS" if pkg.plagiarism_report.passed else "WARNING",
+            pkg.image_url,
+            crossword,
+            wb1,
+            wb2,
+        ]

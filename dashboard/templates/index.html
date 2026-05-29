@@ -133,6 +133,10 @@
       </select>
       <button id="btn-run" onclick="runPipeline()">Generate</button>
       <button style="background:#1e293b;color:#94a3b8;border:1px solid #334155" onclick="openHistory()">모두 보기</button>
+      <a id="btn-sheet" href="#" target="_blank" class="hidden"
+         style="padding:10px 20px;background:#166534;color:#4ade80;border-radius:8px;font-size:.9rem;font-weight:500;text-decoration:none">
+        📊 시트 열기
+      </a>
     </div>
 
     <!-- Log -->
@@ -359,6 +363,15 @@
       // Image V1 / V2
       renderImageV1(r);
       renderImageV2(r);
+
+      // 시트 링크
+      const btnSheet = document.getElementById("btn-sheet");
+      if (r.sheet_url) {
+        btnSheet.href = r.sheet_url;
+        btnSheet.classList.remove("hidden");
+      } else {
+        btnSheet.classList.add("hidden");
+      }
     }
 
     function esc(s) {

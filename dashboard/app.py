@@ -87,8 +87,8 @@ def _run_pipeline(sid: str, topic: str, level: Level, section: Section):
             socketio.emit("log", {"message": msg}, to=sid)
 
         orchestrator = Orchestrator(log_callback=emit_log)
-        pkg = orchestrator.run(topic, level, section)
-        result = _serialize(pkg)
+        pkg, sheet_url = orchestrator.run(topic, level, section)
+        result = _serialize(pkg, sheet_url)
 
         # 히스토리에 저장
         entry = {
@@ -110,7 +110,7 @@ def _run_pipeline(sid: str, topic: str, level: Level, section: Section):
         _running.pop(sid, None)
 
 
-def _serialize(pkg: ContentPackage) -> dict:
+def _serialize(pkg: ContentPackage, sheet_url: str = "") -> dict:
     return {
         "topic": pkg.topic,
         "level": pkg.level.value,
@@ -152,6 +152,7 @@ def _serialize(pkg: ContentPackage) -> dict:
             for w in pkg.workbook_sets
         ],
         "image_url": pkg.image_url,
+        "sheet_url": sheet_url,
     }
 
 

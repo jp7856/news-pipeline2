@@ -17,6 +17,7 @@ from typing import Callable
 from agents import ContentProducerAgent
 from agents.translator import TranslatorAgent
 from agents.image_finder import ImageFinderAgent
+from agents.worksheet import WorksheetAgent
 from models import ContentPackage, Level, Section
 
 logger = logging.getLogger(__name__)
@@ -25,6 +26,7 @@ logger = logging.getLogger(__name__)
 class Orchestrator:
     def __init__(self, log_callback: Callable[[str], None] | None = None):
         self._log = log_callback or (lambda msg: logger.info(msg))
+        self._sheet_url = ""
 
     def run(
         self,
@@ -60,6 +62,11 @@ class Orchestrator:
         image_finder = ImageFinderAgent(log_callback=self._log)
         package = image_finder.run(package)
 
+        # ── Agent 4: Google Sheets 저장 ───────────────────────────
+        worksheet = WorksheetAgent(log_callback=self._log)
+        package, sheet_url = worksheet.run(package)
+        self._sheet_url = sheet_url
+
         # ── 결과 요약 ─────────────────────────────────────────────
         duration = (datetime.now() - start).seconds
         self._log("")
@@ -73,8 +80,9 @@ class Orchestrator:
         self._log(f"    Workbook   : {len(package.workbook_sets)} sets")
         self._log(f"    Korean     : {'완료' if package.article.text_ko else '없음'}")
         self._log(f"    Image      : {'발견' if package.image_url else '없음'}")
+        self._log(f"    Sheets     : {'저장완료' if self._sheet_url else '저장안됨'}")
 
-        return package
+        return package, self._sheet_url
 
 
 def print_result(pkg: ContentPackage) -> None:
