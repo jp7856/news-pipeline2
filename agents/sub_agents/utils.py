@@ -31,12 +31,78 @@ def parse_json(raw: str) -> dict:
     except json.JSONDecodeError:
         pass
 
-    # 3차 시도: 공격적 정리 후 파싱
+    # 3차 시도: 제어문자 제거 후 파싱
     try:
         aggressive = re.sub(r'[\x00-\x1f\x7f]', ' ', raw)
         return json.loads(aggressive)
+    except json.JSONDecodeError:
+        pass
+
+    # 4차 시도: 문자열 값 내 이스케이프 안 된 큰따옴표를 단따옴표로 교체
+    try:
+        fixed = _fix_inner_quotes(raw)
+        return json.loads(fixed)
     except json.JSONDecodeError as e:
         raise ValueError(f"JSON 파싱 실패: {e}\n원본(앞 200자): {raw[:200]}") from e
+
+
+def _fix_inner_quotes(raw: str) -> str:
+    """JSON 문자열 값 내부의 이스케이프 안 된 큰따옴표를 단따옴표로 바꾼다."""
+    result = []
+    in_string = False
+    escape_next = False
+    i = 0
+
+    while i < len(raw):
+        ch = raw[i]
+
+        if escape_next:
+            result.append(ch)
+            escape_next = False
+            i += 1
+            continue
+
+        if ch == "\\":
+            result.append(ch)
+            escape_next = True
+            i += 1
+            continue
+
+        if ch == '"':
+            if not in_string:
+                in_string = True
+                result.append(ch)
+            else:
+                # 다음 non-space 문자 확인
+                j = i + 1
+                while j < len(raw) and raw[j] == ' ':
+                    j += 1
+                next_ch = raw[j] if j < len(raw) else ''
+                # 문자열이 정상 종료되는 경우: 다음이 :, ,, }, ] 중 하나
+                if next_ch in (':', ',', '}', ']', ''):
+                    in_string = False
+                    result.append(ch)
+                else:
+                    # 내부의 따옴표 → 단따옴표로 교체
+                    result.append("'")
+            i += 1
+            continue
+
+        if in_string:
+            if ch == "\n":
+                result.append("\\n")
+            elif ch == "\r":
+                result.append("\\r")
+            elif ch == "\t":
+                result.append("\\t")
+            else:
+                result.append(ch)
+        else:
+            result.append(ch)
+
+        i += 1
+
+    return "".join(result)
 
 
 def _fix_json_strings(raw: str) -> str:

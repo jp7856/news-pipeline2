@@ -71,7 +71,12 @@ Respond in this exact JSON format:
   "article": "<full article text with paragraphs separated by \\n\\n>",
   "vocabulary": ["word1", "word2", "word3", "word4", "word5"],
   "sources": ["https://...", "https://...", "https://..."]
-}}"""
+}}
+
+CRITICAL JSON RULES:
+- Do NOT use double quotation marks (") inside any text field values.
+- Replace any in-text double quotes with single quotes (') for dialogue or emphasis.
+- Use only \\n\\n to separate paragraphs inside the "article" field."""
 
         data = self._call_claude(prompt)
 
