@@ -179,19 +179,25 @@
     });
 
     socket.on("pipeline_done", ({result}) => {
+      _clientRunning = false;
       setRunning(false);
       renderResult(result);
     });
 
     socket.on("pipeline_error", ({error}) => {
+      _clientRunning = false;
       setRunning(false);
       alert("Error: " + error);
     });
 
+    let _clientRunning = false;
+
     async function runPipeline() {
+      if (_clientRunning) return;
       const topic = document.getElementById("topic").value.trim();
       if (!topic) { alert("Please enter a topic."); return; }
 
+      _clientRunning = true;
       setRunning(true);
       logBox.innerHTML = "";
       logBox.classList.remove("hidden");
@@ -209,6 +215,7 @@
       if (!resp.ok) {
         const data = await resp.json();
         alert("Error: " + data.error);
+        _clientRunning = false;
         setRunning(false);
       }
     }
