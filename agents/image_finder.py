@@ -1,16 +1,16 @@
-"""Agent 3: 이미지 탐색 — Google Custom Search API로 기사 관련 이미지를 찾는다."""
+"""Agent 3: 이미지 탐색 — Unsplash API로 기사 관련 이미지를 자동 선택한다."""
 
 import logging
 from typing import Callable
 
 import requests
 
-from config import GOOGLE_CSE_API_KEY, GOOGLE_CSE_ID
+from config import UNSPLASH_ACCESS_KEY
 from models import ContentPackage
 
 logger = logging.getLogger(__name__)
 
-SEARCH_URL = "https://www.googleapis.com/customsearch/v1"
+UNSPLASH_URL = "https://api.unsplash.com/search/photos"
 
 
 class ImageFinderAgent:
@@ -33,28 +33,20 @@ class ImageFinderAgent:
         self._log("[Agent3] 이미지 탐색 완료")
         return package
 
-    # ------------------------------------------------------------------
-
     def _build_query(self, package: ContentPackage) -> str:
-        """topic + 섹션으로 뉴스형 이미지 검색어를 구성한다."""
-        return f"{package.topic} {package.section.value} news"
+        return f"{package.topic} {package.section.value}"
 
     def _search_image(self, query: str) -> str | None:
-        if not GOOGLE_CSE_API_KEY or not GOOGLE_CSE_ID:
+        if not UNSPLASH_ACCESS_KEY:
             return None
-
-        params = {
-            "key": GOOGLE_CSE_API_KEY,
-            "cx": GOOGLE_CSE_ID,
-            "q": query,
-            "searchType": "image",
-            "num": 1,
-            "safe": "active",
-            "imgType": "news",
-        }
-        resp = requests.get(SEARCH_URL, params=params, timeout=10)
+        resp = requests.get(
+            UNSPLASH_URL,
+            params={"query": query, "per_page": 1, "orientation": "landscape"},
+            headers={"Authorization": f"Client-ID {UNSPLASH_ACCESS_KEY}"},
+            timeout=10,
+        )
         resp.raise_for_status()
-        items = resp.json().get("items", [])
-        if items:
-            return items[0].get("link", "")
+        results = resp.json().get("results", [])
+        if results:
+            return results[0]["urls"]["regular"]
         return None

@@ -132,7 +132,8 @@
         <div class="tab" data-tab="editing">Editing</div>
         <div class="tab" data-tab="crossword">Crossword</div>
         <div class="tab" data-tab="workbook">Workbook</div>
-        <div class="tab" data-tab="image">Image</div>
+        <div class="tab" data-tab="image-v1">이미지 V1</div>
+        <div class="tab" data-tab="image-v2">이미지 V2</div>
       </div>
 
       <div class="panel active" id="panel-article"></div>
@@ -141,7 +142,8 @@
       <div class="panel" id="panel-editing"></div>
       <div class="panel" id="panel-crossword"></div>
       <div class="panel" id="panel-workbook"></div>
-      <div class="panel" id="panel-image"></div>
+      <div class="panel" id="panel-image-v1"></div>
+      <div class="panel" id="panel-image-v2"></div>
     </div>
   </main>
 
@@ -317,8 +319,9 @@
         ${wbHtml}
       `;
 
-      // Image
-      renderImagePanel(r);
+      // Image V1 / V2
+      renderImageV1(r);
+      renderImageV2(r);
     }
 
     function esc(s) {
@@ -326,60 +329,75 @@
       return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
     }
 
-    // ── Image panel ──────────────────────────────────────────────
+    // ── Image panels ─────────────────────────────────────────────
     let _imazinePopup = null;
+    let _currentImageUrl = "";
 
-    function renderImagePanel(r) {
-      const imgUrl = r.image_url || "";
+    function _imagePreviewHtml(imgUrl, wrapId, badgeId, urlId) {
       const imgHtml = imgUrl
-        ? `<img id="selected-image" src="${esc(imgUrl)}" alt="article image" onclick="openLightbox(this.src)">`
+        ? `<img src="${esc(imgUrl)}" alt="article image" onclick="openLightbox(this.src)">`
         : `<div class="img-no-image">이미지 없음</div>`;
-      document.getElementById("panel-image").innerHTML = `
-        <h2>Image <span class="stat" id="image-source-badge">${imgUrl ? "자동선택" : "없음"}</span></h2>
+      return `
         <div class="img-panel">
-          <div class="img-preview" id="img-preview-wrap">${imgHtml}</div>
+          <div class="img-preview" id="${wrapId}">${imgHtml}</div>
           <div class="img-info">
-            <p id="img-url-text">${imgUrl ? esc(imgUrl) : "이미지를 찾지 못했습니다."}</p>
-            <div style="display:flex;gap:8px;flex-wrap:wrap">
-              <a class="btn-search" href="https://jp7856.github.io/imazine/" target="imazine-popup"
-                 onclick="openImazine(event, 'https://jp7856.github.io/imazine/')">이미지 V1</a>
-              <a class="btn-search" href="https://jp7856.github.io/ne-times-image-finder/" target="imazine-popup"
-                 style="background:#3b82f6"
-                 onclick="openImazine(event, 'https://jp7856.github.io/ne-times-image-finder/')">이미지 V2</a>
-            </div>
-            <p style="margin-top:12px;font-size:.8rem;color:#475569">
-              이미지를 선택하면 자동으로 업데이트됩니다.
-            </p>
+            <p id="${urlId}">${imgUrl ? esc(imgUrl) : "이미지를 찾지 못했습니다."}</p>
+            <span class="stat" id="${badgeId}" style="display:inline-block;margin-bottom:12px">${imgUrl ? "자동선택" : "없음"}</span>
           </div>
-        </div>
-      `;
+        </div>`;
     }
 
-    function openImazine(e, url) {
+    function renderImageV1(r) {
+      _currentImageUrl = r.image_url || "";
+      document.getElementById("panel-image-v1").innerHTML = `
+        <h2>이미지 V1 — 검색어 생성기</h2>
+        ${_imagePreviewHtml(_currentImageUrl, "img-wrap-v1", "img-badge-v1", "img-url-v1")}
+        <div style="margin-top:16px">
+          <a class="btn-search" href="https://jp7856.github.io/imazine/" target="imazine-popup"
+             onclick="openImageSite(event,'https://jp7856.github.io/imazine/')">imazine 열기</a>
+          <p style="margin-top:10px;font-size:.8rem;color:#475569">
+            검색어를 생성하고 이미지 URL을 붙여넣으면 자동 업데이트됩니다.
+          </p>
+        </div>`;
+    }
+
+    function renderImageV2(r) {
+      _currentImageUrl = r.image_url || "";
+      document.getElementById("panel-image-v2").innerHTML = `
+        <h2>이미지 V2 — Unsplash 직접 검색</h2>
+        ${_imagePreviewHtml(_currentImageUrl, "img-wrap-v2", "img-badge-v2", "img-url-v2")}
+        <div style="margin-top:16px">
+          <a class="btn-search" href="https://jp7856.github.io/ne-times-image-finder/" target="imazine-popup"
+             style="background:#3b82f6"
+             onclick="openImageSite(event,'https://jp7856.github.io/ne-times-image-finder/')">Image Finder 열기</a>
+          <p style="margin-top:10px;font-size:.8rem;color:#475569">
+            이미지를 클릭하면 바로 파이프라인에 반영됩니다.
+          </p>
+        </div>`;
+    }
+
+    function openImageSite(e, url) {
       e.preventDefault();
-      _imazinePopup = window.open(
-        url,
-        "imazine-popup",
-        "width=1000,height=700,left=200,top=100"
-      );
+      _imazinePopup = window.open(url, "imazine-popup", "width=1000,height=700,left=200,top=100");
     }
 
-    // imazine에서 선택한 이미지 수신
+    // 이미지 사이트에서 선택한 이미지 수신
     window.addEventListener("message", (event) => {
       if (!event.data || !event.data.imageUrl) return;
-      const url = event.data.imageUrl;
-      updateSelectedImage(url, "imazine 선택");
+      _currentImageUrl = event.data.imageUrl;
+      _applyImage("img-wrap-v1", "img-badge-v1", "img-url-v1");
+      _applyImage("img-wrap-v2", "img-badge-v2", "img-url-v2");
       if (_imazinePopup && !_imazinePopup.closed) _imazinePopup.close();
     });
 
-    function updateSelectedImage(url, badge) {
-      const wrap = document.getElementById("img-preview-wrap");
-      const urlText = document.getElementById("img-url-text");
-      const badgeEl = document.getElementById("image-source-badge");
+    function _applyImage(wrapId, badgeId, urlId) {
+      const wrap = document.getElementById(wrapId);
+      const urlEl = document.getElementById(urlId);
+      const badgeEl = document.getElementById(badgeId);
       if (!wrap) return;
-      wrap.innerHTML = `<img id="selected-image" src="${esc(url)}" alt="article image" onclick="openLightbox(this.src)">`;
-      if (urlText) urlText.textContent = url;
-      if (badgeEl) { badgeEl.textContent = badge; badgeEl.style.background = "#1e3a5f"; badgeEl.style.color = "#93c5fd"; }
+      wrap.innerHTML = `<img src="${esc(_currentImageUrl)}" alt="article image" onclick="openLightbox(this.src)">`;
+      if (urlEl) urlEl.textContent = _currentImageUrl;
+      if (badgeEl) { badgeEl.textContent = "선택됨"; badgeEl.style.background = "#1e3a5f"; badgeEl.style.color = "#93c5fd"; }
     }
 
     // ── Lightbox ─────────────────────────────────────────────────
