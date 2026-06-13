@@ -42,8 +42,45 @@ def parse_json(raw: str) -> dict:
     try:
         fixed = _fix_inner_quotes(raw)
         return json.loads(fixed)
-    except json.JSONDecodeError as e:
+    except json.JSONDecodeError:
+        pass
+
+    # 5차 시도: article 필드만 정규식으로 직접 추출
+    try:
+        return _extract_fields_regex(raw)
+    except Exception as e:
         raise ValueError(f"JSON 파싱 실패: {e}\n원본(앞 200자): {raw[:200]}") from e
+
+
+def _extract_fields_regex(raw: str) -> dict:
+    """JSON 파싱이 모두 실패할 때 정규식으로 주요 필드를 직접 추출한다."""
+    result = {}
+
+    # article 필드 추출
+    m = re.search(r'"article"\s*:\s*"(.*?)"\s*(?:,\s*"(?:vocabulary|sources)"|\s*\})', raw, re.DOTALL)
+    if m:
+        result["article"] = m.group(1).replace("\\n", "\n")
+
+    # vocabulary 배열 추출
+    m = re.search(r'"vocabulary"\s*:\s*(\[.*?\])', raw, re.DOTALL)
+    if m:
+        try:
+            result["vocabulary"] = json.loads(m.group(1))
+        except Exception:
+            result["vocabulary"] = []
+
+    # sources 배열 추출
+    m = re.search(r'"sources"\s*:\s*(\[.*?\])', raw, re.DOTALL)
+    if m:
+        try:
+            result["sources"] = json.loads(m.group(1))
+        except Exception:
+            result["sources"] = []
+
+    if not result.get("article"):
+        raise ValueError("article 필드를 추출하지 못했습니다.")
+
+    return result
 
 
 def _fix_inner_quotes(raw: str) -> str:
