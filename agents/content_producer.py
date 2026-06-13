@@ -92,16 +92,26 @@ class ContentProducerAgent:
                 ),
             )
 
-        # ── Step 1: 기사 작성 (출처 + 오늘 날짜 + 지면 규격 기반) ──
+        # ── Step 1: 기사 2버전 작성 (생동감형 추천 + 레벨엄수형 대안) (P2-2) ──
         article = self._writer.run(
             topic, level, section,
             reference_format=reference,
             source_content=research.combined_text,
             today=today,
             page_cfg=page_cfg,
+            variant="lively",
         )
-        # 출처는 실제 fetch한 URL로 고정 (P0-1 수용기준 ①)
-        article.sources = research.urls
+        article.sources = research.urls  # 실제 fetch URL로 고정 (P0-1 ①)
+
+        alternate = self._writer.run(
+            topic, level, section,
+            reference_format=reference,
+            source_content=research.combined_text,
+            today=today,
+            page_cfg=page_cfg,
+            variant="strict",
+        )
+        self._log("[Agent1] 2버전 생성 — 생동감형(추천) / 레벨엄수형(대안)")
 
         # ── Step 2: 게이트 루프 (표절 + 사실·시제 + 단어수) ───────
         plagiarism_report = None
@@ -169,6 +179,47 @@ class ContentProducerAgent:
             workbook_sets=workbook_sets,
             research=research,
             review_report=review_report,
+            status=ArticleStatus.APPROVED,
+            alternate_text=alternate.text if alternate else "",
+            alternate_label="레벨엄수형",
+            selected_variant="생동감형",
+        )
+
+    def rebuild(
+        self,
+        topic: str,
+        level: Level,
+        section: Section,
+        final_text: str,
+        page: str = "",
+        sources: list[str] | None = None,
+    ) -> ContentPackage:
+        """편집자가 확정한 본문으로 다운스트림을 재생성한다 (P2-2 버전선택 / P2-3 제안적용).
+        리서치·게이트는 건너뛴다(사람이 승인한 텍스트). 어휘·교정·크로스워드·워크북 재생성."""
+        from models import ArticleResult
+        page_cfg = get_page_config(level.value, page or None)
+        self._log(f"[Rebuild] 확정 본문 기준 재생성 — {page_cfg['page']}")
+
+        words, detail = self._writer.extract_vocabulary(final_text, level)
+        article = ArticleResult(
+            text=final_text, vocabulary=words, sources=sources or [],
+            vocabulary_detail=detail,
+        )
+        self._check_word_count(article, page_cfg)
+
+        plagiarism_report = self._plagcheck.run(article)
+        editing_suggestions = self._editor.run(article, level)
+        crossword_sentences = self._crossword.run(article)
+        workbook_sets = self._workbook.run(
+            article, level, format_key=page_cfg.get("workbook_format")
+        )
+        self._log("[Rebuild] 재생성 완료")
+        return ContentPackage(
+            topic=topic, level=level, section=section, article=article,
+            plagiarism_report=plagiarism_report,
+            editing_suggestions=editing_suggestions,
+            crossword_sentences=crossword_sentences,
+            workbook_sets=workbook_sets,
             status=ArticleStatus.APPROVED,
         )
 

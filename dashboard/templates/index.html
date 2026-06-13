@@ -109,6 +109,16 @@
     #lightbox img{max-width:90vw;max-height:90vh;border-radius:10px}
     #lightbox-close{position:absolute;top:20px;right:28px;color:#fff;font-size:2rem;cursor:pointer;line-height:1}
 
+    /* Version toggle (P2-2) */
+    .ver-btn{background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:8px;padding:6px 14px;font-size:.8rem;cursor:pointer}
+    .ver-btn.active{background:#1e3a5f;color:#93c5fd;border-color:#3b82f6}
+    /* Editing apply/reject (P2-3) */
+    .sg-btn{border:none;border-radius:6px;padding:4px 12px;font-size:.78rem;cursor:pointer;margin-right:6px}
+    .sg-apply{background:#14532d;color:#4ade80}
+    .sg-apply.on{background:#16a34a;color:#fff}
+    .sg-reject{background:#3a1d1d;color:#fca5a5}
+    .sg-reject.on{background:#b91c1c;color:#fff}
+
     .hidden{display:none}
   </style>
 </head>
@@ -281,7 +291,10 @@
       badge.className = "badge" + (running ? " running" : "");
     }
 
+    let _lastResult = null;
+
     function renderResult(r) {
+      _lastResult = r;
       document.getElementById("result-area").classList.remove("hidden");
 
       // 상태 배너 (NEEDS_REVIEW / 검수 통과)
@@ -322,7 +335,13 @@
           <span class="stat">${r.section}</span>
           <span class="stat">${r.article.word_count} words</span>
         </div>
-        <div class="article-text">${esc(r.article.text || "(생성 보류됨)")}</div>
+        ${(r.alternate_text) ? `
+        <div style="display:flex;gap:8px;margin-bottom:10px">
+          <button class="ver-btn active" id="ver-sel" onclick="showVersion('sel')">${esc(r.selected_variant || "추천")} (선택됨)</button>
+          <button class="ver-btn" id="ver-alt" onclick="showVersion('alt')">${esc(r.alternate_label || "대안")}</button>
+          <button style="margin-left:auto;background:#16a34a;color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:.8rem;cursor:pointer" onclick="selectAlternate()">이 버전으로 저장·재생성</button>
+        </div>` : ""}
+        <div class="article-text" id="article-body">${esc(r.article.text || "(생성 보류됨)")}</div>
         <h2 style="margin-top:20px">Vocabulary ${(r.article.vocabulary_detail && r.article.vocabulary_detail.length) ? `<span class="stat">${r.article.vocabulary_detail.length} words</span>` : ""}</h2>
         ${(r.article.vocabulary_detail && r.article.vocabulary_detail.length)
           ? `<div>${r.article.vocabulary_detail.map(v => `<span class="vocab-tag">${esc(v.word)} <span style="color:#64748b">${esc(v.cefr)}</span> · ${esc(v.meaning_ko)}</span>`).join("")}</div>`
@@ -355,20 +374,26 @@
         ${r.plagiarism.notes ? `<p style="margin-top:12px;color:#94a3b8;font-size:.85rem">${esc(r.plagiarism.notes)}</p>` : ""}
       `;
 
-      // Editing
+      // Editing (P2-3: 제안별 적용/거부 + 반영 재생성)
       let editHtml = r.editing.length === 0 ? '<p style="color:#4ade80">No issues found.</p>' : "";
-      for (const s of r.editing) {
-        editHtml += `<div class="suggestion">
+      r.editing.forEach((s, i) => {
+        editHtml += `<div class="suggestion" data-i="${i}">
           <div class="orig">"${esc(s.original)}"</div>
           <div class="arrow">&#8595;</div>
           <div class="sugg">"${esc(s.suggestion)}"</div>
           <div class="reason">${esc(s.reason)}</div>
+          <div style="margin-top:6px">
+            <button class="sg-btn sg-apply" onclick="markSuggestion(${i},'apply',this)">적용</button>
+            <button class="sg-btn sg-reject" onclick="markSuggestion(${i},'reject',this)">거부</button>
+          </div>
         </div>`;
-      }
+      });
       document.getElementById("panel-editing").innerHTML = `
         <h2>Editing Suggestions <span class="stat">${r.editing.length} items</span></h2>
         ${editHtml}
+        ${r.editing.length ? `<button style="margin-top:14px;background:#16a34a;color:#fff;border:none;border-radius:8px;padding:8px 18px;font-size:.85rem;cursor:pointer" onclick="applyEdits()">선택한 제안 반영하고 재생성</button>` : ""}
       `;
+      _editChoices = {};
 
       // Crossword
       let cwHtml = "";
@@ -421,6 +446,71 @@
     function esc(s) {
       if (!s) return "";
       return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+    }
+
+    // ── P2-2: 버전 토글/선택 ──────────────────────────────────────
+    function showVersion(which) {
+      if (!_lastResult) return;
+      const body = document.getElementById("article-body");
+      document.getElementById("ver-sel").classList.toggle("active", which === "sel");
+      document.getElementById("ver-alt").classList.toggle("active", which === "alt");
+      body.textContent = which === "alt" ? _lastResult.alternate_text : _lastResult.article.text;
+    }
+    function selectAlternate() {
+      if (!_lastResult || !_lastResult.alternate_text) return;
+      if (!confirm(`'${_lastResult.alternate_label}' 버전으로 저장하고 번역·워크북·이미지를 재생성합니다. 계속할까요?`)) return;
+      regenerate(_lastResult.alternate_text);
+    }
+
+    // ── P2-3: 제안 적용/거부 + 반영 재생성 ────────────────────────
+    let _editChoices = {};
+    function markSuggestion(i, choice, btn) {
+      _editChoices[i] = choice;
+      const wrap = btn.parentElement;
+      wrap.querySelector(".sg-apply").classList.toggle("on", choice === "apply");
+      wrap.querySelector(".sg-reject").classList.toggle("on", choice === "reject");
+    }
+    function applyEdits() {
+      if (!_lastResult) return;
+      let text = _lastResult.article.text;
+      let applied = 0;
+      _lastResult.editing.forEach((s, i) => {
+        if (_editChoices[i] === "apply" && s.original && text.includes(s.original)) {
+          text = text.replace(s.original, s.suggestion);
+          applied++;
+        }
+      });
+      if (!applied) { alert("적용할 제안을 하나 이상 선택하세요."); return; }
+      if (!confirm(`${applied}건의 제안을 반영하고 다운스트림을 재생성합니다. 계속할까요?`)) return;
+      regenerate(text);
+    }
+
+    // ── 공통 재생성 호출 (P2-2/P2-3) ──────────────────────────────
+    async function regenerate(finalText) {
+      if (_clientRunning || !_lastResult) return;
+      _clientRunning = true;
+      setRunning(true);
+      logBox.innerHTML = "";
+      logBox.classList.remove("hidden");
+      document.getElementById("result-area").classList.add("hidden");
+      const resp = await fetch("/api/regenerate", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+          sid: _mySid,
+          final_text: finalText,
+          topic: _lastResult.topic,
+          level: _lastResult.level,
+          section: _lastResult.section,
+          page: document.getElementById("page").value,
+          sources: (_lastResult.research && _lastResult.research.sources)
+            ? _lastResult.research.sources.map(s => s.url) : (_lastResult.article.sources || []),
+        }),
+      });
+      if (!resp.ok) {
+        const d = await resp.json(); alert("Error: " + d.error);
+        _clientRunning = false; setRunning(false);
+      }
     }
 
     // ── Image panels ─────────────────────────────────────────────

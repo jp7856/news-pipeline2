@@ -105,6 +105,29 @@ class Orchestrator:
 
         return package, self._sheet_url
 
+    def rebuild_and_run(
+        self,
+        topic: str,
+        level: Level,
+        section: Section,
+        final_text: str,
+        page: str = "",
+        sources: list[str] | None = None,
+    ) -> tuple[ContentPackage, str]:
+        """확정 본문(버전 선택 또는 편집 반영)으로 재생성 후 번역·이미지·저장 (P2-2/P2-3)."""
+        self._log("=== Rebuild Start (확정 본문 기준) ===")
+        producer = ContentProducerAgent(log_callback=self._log)
+        package = producer.rebuild(topic, level, section, final_text, page=page, sources=sources)
+
+        translator = TranslatorAgent(log_callback=self._log)
+        package = translator.run(package)
+        image_finder = ImageFinderAgent(log_callback=self._log)
+        package = image_finder.run(package)
+        worksheet = WorksheetAgent(log_callback=self._log)
+        package, sheet_url = worksheet.run(package)
+        self._log("=== Rebuild Complete ===")
+        return package, sheet_url
+
     def run_issue(
         self,
         topics: dict[str, str],

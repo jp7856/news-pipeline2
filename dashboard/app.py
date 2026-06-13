@@ -82,6 +82,55 @@ def api_run():
     return jsonify({"message": "Pipeline started"})
 
 
+@app.route("/api/regenerate", methods=["POST"])
+def api_regenerate():
+    """확정 본문(버전 선택 P2-2 / 편집 반영 P2-3)으로 다운스트림 재생성."""
+    data = request.json
+    sid = data.get("sid", "")
+    final_text = (data.get("final_text") or "").strip()
+    topic = (data.get("topic") or "").strip()
+    level_str = data.get("level", "junior")
+    section_str = data.get("section", "환경")
+    page = data.get("page", "").strip()
+    sources = data.get("sources") or []
+
+    if not final_text:
+        return jsonify({"error": "final_text is required."}), 400
+    if _running.get(sid):
+        return jsonify({"error": "Pipeline already running."}), 409
+    try:
+        level = Level(level_str)
+        section = Section(section_str)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+    _running[sid] = True
+
+    def _job():
+        try:
+            def emit_log(msg: str):
+                socketio.emit("log", {"message": msg}, to=sid)
+            orchestrator = Orchestrator(log_callback=emit_log)
+            pkg, sheet_url = orchestrator.rebuild_and_run(
+                topic, level, section, final_text, page=page, sources=sources
+            )
+            result = _serialize(pkg, sheet_url)
+            _history.append({
+                "idx": len(_history),
+                "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                "topic": topic, "level": level.value, "section": section.value,
+                "result": result,
+            })
+            socketio.emit("pipeline_done", {"result": result}, to=sid)
+        except Exception as e:
+            socketio.emit("pipeline_error", {"error": str(e)}, to=sid)
+        finally:
+            _running.pop(sid, None)
+
+    threading.Thread(target=_job, daemon=True).start()
+    return jsonify({"message": "Rebuild started"})
+
+
 @app.route("/api/history")
 def api_history():
     return jsonify(_history)
@@ -186,6 +235,9 @@ def _serialize(pkg: ContentPackage, sheet_url: str = "") -> dict:
         ],
         "sheet_url": sheet_url,
         "status": pkg.status.value if hasattr(pkg.status, "value") else str(pkg.status),
+        "alternate_text": pkg.alternate_text,
+        "alternate_label": pkg.alternate_label,
+        "selected_variant": pkg.selected_variant,
         "research": {
             "success": pkg.research.success if pkg.research else False,
             "sources": [

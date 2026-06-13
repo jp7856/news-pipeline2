@@ -34,6 +34,7 @@ class WriterAgent:
         today: str = "",
         revision_notes: str = "",
         page_cfg: dict | None = None,
+        variant: str = "",
     ) -> ArticleResult:
         """
         topic : 기사 주제 또는 뉴스 URL
@@ -96,8 +97,16 @@ class WriterAgent:
             else ""
         )
 
+        variant_hint = ""
+        if variant == "lively":
+            variant_hint = ("\n\nVersion style: LIVELY — natural, engaging, vivid tone "
+                            "that draws the reader in (while staying within the CEFR level).")
+        elif variant == "strict":
+            variant_hint = ("\n\nVersion style: LEVEL-STRICT — prioritize strict CEFR fidelity "
+                            "and controlled vocabulary/sentence complexity over flair.")
+
         prompt = f"""You are writing an article for {cfg['newspaper']}.
-{source_hint}{temporal_hint}{revision_hint}{structure_hint}
+{source_hint}{temporal_hint}{revision_hint}{structure_hint}{variant_hint}
 
 Topic: {topic}
 Section: {section.value}
@@ -169,6 +178,32 @@ CRITICAL JSON RULES:
             f"어휘 {len(result.vocabulary)}개 / 출처 {len(result.sources)}개"
         )
         return result
+
+    def extract_vocabulary(self, text: str, level: Level) -> tuple[list[str], list[VocabItem]]:
+        """편집/대안 본문에서 어휘 8~14개를 재추출한다 (P2-2/P2-3 재생성용)."""
+        cfg = LEVEL_CONFIG[level.value]
+        prompt = f"""Select 8-14 key vocabulary words from the article below, worth learning
+at {cfg['newspaper']} level (CEFR {cfg['cefr']}; exclude proper nouns). List them in
+order of first appearance. For each give the dictionary BASE FORM, CEFR label, and a
+1-2 sense Korean meaning matching the context.
+
+Article:
+\"\"\"
+{text}
+\"\"\"
+
+Respond in this exact JSON format (no double quotes inside values):
+{{"vocabulary": [{{"word": "host", "cefr": "B1", "meaning_ko": "개최하다"}}]}}"""
+        try:
+            data = self._call_claude(prompt)
+        except Exception:
+            return [], []
+        words, detail = [], []
+        for v in data.get("vocabulary", []):
+            if isinstance(v, dict) and v.get("word"):
+                detail.append(VocabItem(v.get("word", ""), v.get("cefr", ""), v.get("meaning_ko", "")))
+                words.append(v["word"])
+        return words, detail
 
     def _call_claude(self, prompt: str) -> dict:
         message = self._client.messages.create(

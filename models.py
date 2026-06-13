@@ -253,6 +253,11 @@ class ContentPackage:
     review_report: Optional[ReviewReport] = None
     status: ArticleStatus = ArticleStatus.COLLECTED
 
+    # P2-2: 기사 2버전 (생동감형/레벨엄수형)
+    alternate_text: str = ""              # 미선택 대안 버전 본문
+    alternate_label: str = ""             # 예: "레벨엄수형"
+    selected_variant: str = ""            # 현재 선택된 버전 라벨
+
 
 # ============================================================
 # 파이프라인 실행 모델
