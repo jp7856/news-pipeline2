@@ -91,7 +91,16 @@ class ResearcherAgent:
                 },
                 timeout=10,
             )
-            resp.raise_for_status()
+            if resp.status_code >= 400:
+                # Google 오류 사유를 본문에서 추출 (403 원인 진단용)
+                reason = ""
+                try:
+                    err = resp.json().get("error", {})
+                    reason = err.get("message", "") or str(err.get("errors", ""))
+                except Exception:
+                    reason = resp.text[:200]
+                self._log(f"[Agent0] 검색 거부 ({resp.status_code}): {reason}")
+                return []
             items = resp.json().get("items", [])
             return [it.get("link", "") for it in items if it.get("link")]
         except Exception as e:
