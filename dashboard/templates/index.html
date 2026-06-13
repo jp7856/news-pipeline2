@@ -323,8 +323,10 @@
           <span class="stat">${r.article.word_count} words</span>
         </div>
         <div class="article-text">${esc(r.article.text || "(생성 보류됨)")}</div>
-        <h2 style="margin-top:20px">Vocabulary</h2>
-        <div>${r.article.vocabulary.map(w => `<span class="vocab-tag">${esc(w)}</span>`).join("")}</div>
+        <h2 style="margin-top:20px">Vocabulary ${(r.article.vocabulary_detail && r.article.vocabulary_detail.length) ? `<span class="stat">${r.article.vocabulary_detail.length} words</span>` : ""}</h2>
+        ${(r.article.vocabulary_detail && r.article.vocabulary_detail.length)
+          ? `<div>${r.article.vocabulary_detail.map(v => `<span class="vocab-tag">${esc(v.word)} <span style="color:#64748b">${esc(v.cefr)}</span> · ${esc(v.meaning_ko)}</span>`).join("")}</div>`
+          : `<div>${r.article.vocabulary.map(w => `<span class="vocab-tag">${esc(w)}</span>`).join("")}</div>`}
         ${researchHtml}
       `;
 

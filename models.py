@@ -74,12 +74,23 @@ class Article:
 # ============================================================
 
 @dataclass
+class VocabItem:
+    """어휘 1개 + CEFR 근거 (P2-1, 원문: 어휘리스트 마스터 프롬프트)"""
+    word: str            # 원형 (base form)
+    cefr: str            # 예: "B2"
+    meaning_ko: str      # 한국어 뜻 (1~2개, 콤마+공백 구분)
+
+
+@dataclass
 class ArticleResult:
     """WriterAgent가 생성한 기사"""
     text: str                          # 완성된 기사 본문 (영어)
-    vocabulary: list[str]              # 추출된 핵심 어휘 5~8개
+    vocabulary: list[str]              # 핵심 어휘 단어 리스트 (하위호환)
     sources: list[str]                 # 참고 URL 목록 (실제 fetch된 기사 URL만)
     word_count: int = 0
+
+    # P2-1: 어휘 상세 (8~14개, CEFR 근거·한국어 뜻, 등장 순서)
+    vocabulary_detail: list[VocabItem] = field(default_factory=list)
 
     # Agent 2: 번역 결과
     text_ko: str = ""                  # 한국어 번역 본문
@@ -88,6 +99,13 @@ class ArticleResult:
     def __post_init__(self):
         if not self.word_count and self.text:
             self.word_count = len(self.text.split())
+
+    def vocab_formatted(self) -> str:
+        """vocab-rules.md 출력 형식: 'word 뜻 / word 뜻 ... / Total: N words'"""
+        if not self.vocabulary_detail:
+            return ", ".join(self.vocabulary)
+        items = " / ".join(f"{v.word} {v.meaning_ko}" for v in self.vocabulary_detail)
+        return f"{items}\nTotal: {len(self.vocabulary_detail)} words"
 
 
 # ============================================================

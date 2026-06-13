@@ -153,7 +153,7 @@ class WorksheetAgent:
             pkg.article.text,
             pkg.article.text_ko,
             pkg.article.summary_ko,
-            ", ".join(pkg.article.vocabulary),
+            pkg.article.vocab_formatted(),
             "\n".join(pkg.article.sources),
             "PASS" if pkg.plagiarism_report.passed else "WARNING",
             pkg.image_url,

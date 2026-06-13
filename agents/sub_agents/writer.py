@@ -6,7 +6,7 @@ from typing import Callable
 import anthropic
 
 from config import ANTHROPIC_API_KEY, CLAUDE_MODEL, SYSTEM_PROMPT, LEVEL_CONFIG
-from models import ArticleResult, Level, Section
+from models import ArticleResult, Level, Section, VocabItem
 from agents.sub_agents.utils import parse_json
 
 logger = logging.getLogger(__name__)
@@ -115,14 +115,21 @@ Instructions:
 4. Add one or two points that spark curiosity or deeper interest.
 5. Include background explanations where needed for younger readers.
 6. Write in a tone and style appropriate to {cfg['newspaper']}.
-7. At the end, list 3–5 key vocabulary words from the article.
+7. Select 8-14 key vocabulary words worth learning at this paper's CEFR band
+   (slightly above the article's base level; exclude proper nouns and words
+   students already know). List them in ORDER OF FIRST APPEARANCE in the article.
+   For each: the dictionary BASE FORM (e.g. hosted→host), its CEFR label, and a
+   1-2 sense Korean meaning matching the article context.
 8. For "sources", list ONLY the source URLs provided in the researched material
    above — do not invent or add decorative URLs.
 
 Respond in this exact JSON format:
 {{
   "article": "<full article text with paragraphs separated by \\n\\n>",
-  "vocabulary": ["word1", "word2", "word3", "word4", "word5"],
+  "vocabulary": [
+    {{"word": "host", "cefr": "B1", "meaning_ko": "개최하다"}},
+    {{"word": "venue", "cefr": "B1", "meaning_ko": "경기장, 장소"}}
+  ],
   "sources": ["https://...", "https://...", "https://..."]
 }}
 
@@ -134,13 +141,28 @@ CRITICAL JSON RULES:
         data = self._call_claude(prompt)
 
         article_text = data.get("article", "")
-        vocabulary = data.get("vocabulary", [])
+        raw_vocab = data.get("vocabulary", [])
         sources = data.get("sources", [])
+
+        # P2-1: dict 형식(신규) / str 리스트(구형) 모두 수용
+        vocab_detail = []
+        vocab_words = []
+        for v in raw_vocab:
+            if isinstance(v, dict):
+                vocab_detail.append(VocabItem(
+                    word=v.get("word", ""),
+                    cefr=v.get("cefr", ""),
+                    meaning_ko=v.get("meaning_ko", ""),
+                ))
+                vocab_words.append(v.get("word", ""))
+            elif isinstance(v, str):
+                vocab_words.append(v)
 
         result = ArticleResult(
             text=article_text,
-            vocabulary=vocabulary[:8],
+            vocabulary=vocab_words,
             sources=sources,
+            vocabulary_detail=vocab_detail,
         )
         self._log(
             f"[Writer] 완료 — {result.word_count}단어 / "

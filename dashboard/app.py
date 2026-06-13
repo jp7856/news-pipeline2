@@ -134,6 +134,10 @@ def _serialize(pkg: ContentPackage, sheet_url: str = "") -> dict:
             "summary_ko": pkg.article.summary_ko,
             "word_count": pkg.article.word_count,
             "vocabulary": pkg.article.vocabulary,
+            "vocabulary_detail": [
+                {"word": v.word, "cefr": v.cefr, "meaning_ko": v.meaning_ko}
+                for v in pkg.article.vocabulary_detail
+            ],
             "sources": pkg.article.sources,
         },
         "plagiarism": {
