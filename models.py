@@ -12,6 +12,7 @@ class ArticleStatus(str, Enum):
     APPROVED = "검수통과"
     REJECTED = "검수거부"
     PUBLISHED = "발행완료"
+    NEEDS_REVIEW = "검수필요"   # 게이트 미통과 — 편집자 확인 필요, 다운스트림 보류
     ERROR = "오류"
 
 
@@ -77,7 +78,7 @@ class ArticleResult:
     """WriterAgent가 생성한 기사"""
     text: str                          # 완성된 기사 본문 (영어)
     vocabulary: list[str]              # 추출된 핵심 어휘 5~8개
-    sources: list[str]                 # 참고 URL 목록
+    sources: list[str]                 # 참고 URL 목록 (실제 fetch된 기사 URL만)
     word_count: int = 0
 
     # Agent 2: 번역 결과
@@ -87,6 +88,57 @@ class ArticleResult:
     def __post_init__(self):
         if not self.word_count and self.text:
             self.word_count = len(self.text.split())
+
+
+# ============================================================
+# Agent 0 — 리서치 결과 모델 (P0-1)
+# ============================================================
+
+@dataclass
+class SourceDoc:
+    """실제 fetch한 출처 1건"""
+    url: str
+    title: str
+    text: str          # 추출된 본문 (일부)
+
+
+@dataclass
+class ResearchResult:
+    """ResearcherAgent의 수집 결과"""
+    success: bool                              # 사용 가능한 출처 1건 이상 확보 여부
+    sources: list[SourceDoc] = field(default_factory=list)
+    note: str = ""                             # 실패/경고 사유
+
+    @property
+    def combined_text(self) -> str:
+        """Writer 컨텍스트로 주입할 통합 본문"""
+        parts = []
+        for s in self.sources:
+            parts.append(f"[SOURCE] {s.title}\nURL: {s.url}\n{s.text}")
+        return "\n\n---\n\n".join(parts)
+
+    @property
+    def urls(self) -> list[str]:
+        return [s.url for s in self.sources]
+
+
+# ============================================================
+# 검수 게이트 결과 모델 (P0-2 / P0-3)
+# ============================================================
+
+@dataclass
+class ReviewReport:
+    """검수 게이트(사실·시제) 결과"""
+    passed: bool
+    factual_issues: list[str] = field(default_factory=list)   # 사실 오류
+    temporal_issues: list[str] = field(default_factory=list)  # 시제·시점 오류
+    rewrite_count: int = 0                                     # 재작성 횟수
+    needs_human_review: bool = False                           # 최대 재시도 후 미해결
+    notes: str = ""
+
+    @property
+    def has_blocking_issues(self) -> bool:
+        return bool(self.factual_issues or self.temporal_issues)
 
 
 @dataclass
@@ -138,6 +190,13 @@ class ContentPackage:
 
     # Agent 3: 이미지
     image_url: str = ""
+
+    # Agent 0: 리서치 (P0-1)
+    research: Optional[ResearchResult] = None
+
+    # 검수 게이트 (P0-2 / P0-3)
+    review_report: Optional[ReviewReport] = None
+    status: ArticleStatus = ArticleStatus.COLLECTED
 
 
 # ============================================================

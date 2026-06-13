@@ -156,6 +156,23 @@ def _serialize(pkg: ContentPackage, sheet_url: str = "") -> dict:
         ],
         "image_url": pkg.image_url,
         "sheet_url": sheet_url,
+        "status": pkg.status.value if hasattr(pkg.status, "value") else str(pkg.status),
+        "research": {
+            "success": pkg.research.success if pkg.research else False,
+            "sources": [
+                {"url": s.url, "title": s.title}
+                for s in (pkg.research.sources if pkg.research else [])
+            ],
+            "note": pkg.research.note if pkg.research else "",
+        },
+        "review": ({
+            "passed": pkg.review_report.passed,
+            "factual_issues": pkg.review_report.factual_issues,
+            "temporal_issues": pkg.review_report.temporal_issues,
+            "rewrite_count": pkg.review_report.rewrite_count,
+            "needs_human_review": pkg.review_report.needs_human_review,
+            "notes": pkg.review_report.notes,
+        } if pkg.review_report else None),
     }
 
 

@@ -270,19 +270,48 @@
     function renderResult(r) {
       document.getElementById("result-area").classList.remove("hidden");
 
+      // 상태 배너 (NEEDS_REVIEW / 검수 통과)
+      let banner = "";
+      const needsReview = r.status === "검수필요";
+      if (needsReview) {
+        const rv = r.review || {};
+        const issues = [
+          ...(rv.factual_issues || []).map(i => `사실오류: ${esc(i)}`),
+          ...(rv.temporal_issues || []).map(i => `시제오류: ${esc(i)}`),
+        ];
+        banner = `<div style="background:#7f1d1d;border:1px solid #b91c1c;border-radius:10px;padding:14px 16px;margin-bottom:16px">
+          <strong style="color:#fca5a5">⚠ 검수 필요 — 다운스트림 보류됨</strong>
+          <p style="font-size:.85rem;color:#fecaca;margin-top:6px">${esc(rv.notes || r.research?.note || "사실·시제 검증을 통과하지 못했습니다.")}</p>
+          ${issues.length ? `<ul style="margin:8px 0 0 18px;font-size:.82rem;color:#fecaca">${issues.map(i => `<li>${i}</li>`).join("")}</ul>` : ""}
+          <p style="font-size:.78rem;color:#f87171;margin-top:8px">번역·이미지·시트 저장이 보류되었습니다. 편집자 확인 후 재실행하세요.</p>
+        </div>`;
+      } else if (r.review) {
+        banner = `<div style="background:#14532d;border:1px solid #166534;border-radius:10px;padding:10px 14px;margin-bottom:16px">
+          <strong style="color:#4ade80">✓ 사실·시제 검수 통과</strong>
+          <span style="font-size:.8rem;color:#86efac;margin-left:8px">재작성 ${r.review.rewrite_count || 0}회 · 표절검사 ${r.plagiarism.passed ? "통과" : "경고"}</span>
+        </div>`;
+      }
+
+      // 실시간 리서치 출처 (실제 fetch한 URL)
+      const rs = r.research || {};
+      const researchHtml = (rs.sources && rs.sources.length)
+        ? `<h2 style="margin-top:16px">리서치 출처 (실제 수집 ${rs.sources.length}건)</h2>
+           ${rs.sources.map(s => `<a class="source-link" href="${esc(s.url)}" target="_blank">${esc(s.title || s.url)}</a>`).join("")}`
+        : "";
+
       // Article
       document.getElementById("panel-article").innerHTML = `
+        ${banner}
         <h2>Article</h2>
         <div style="margin-bottom:10px">
           <span class="stat">${r.level.toUpperCase()}</span>
           <span class="stat">${r.section}</span>
           <span class="stat">${r.article.word_count} words</span>
         </div>
-        <div class="article-text">${esc(r.article.text)}</div>
+        <div class="article-text">${esc(r.article.text || "(생성 보류됨)")}</div>
         <h2 style="margin-top:20px">Vocabulary</h2>
         <div>${r.article.vocabulary.map(w => `<span class="vocab-tag">${esc(w)}</span>`).join("")}</div>
-        <h2 style="margin-top:16px">Sources</h2>
-        ${r.article.sources.map(s => `<a class="source-link" href="${esc(s)}" target="_blank">${esc(s)}</a>`).join("")}
+        ${researchHtml}
       `;
 
       // Korean

@@ -18,7 +18,7 @@ from agents import ContentProducerAgent
 from agents.translator import TranslatorAgent
 from agents.image_finder import ImageFinderAgent
 from agents.worksheet import WorksheetAgent
-from models import ContentPackage, Level, Section
+from models import ContentPackage, Level, Section, ArticleStatus
 
 logger = logging.getLogger(__name__)
 
@@ -45,15 +45,32 @@ class Orchestrator:
         """
         run_id = str(uuid.uuid4())[:8]
         start = datetime.now()
+        today = start.strftime("%Y-%m-%d")   # P0-3: 시제 검증 기준일
         self._log(f"=== Pipeline Start (run_id: {run_id}) ===")
         self._log(f"    Topic   : {topic}")
         self._log(f"    Level   : {level.value}")
         self._log(f"    Section : {section.value}")
+        self._log(f"    Today   : {today}")
         self._log("")
 
-        # ── Agent 1: 콘텐츠 제작 ──────────────────────────────────
+        # ── Agent 1: 콘텐츠 제작 (리서치+게이트 포함) ─────────────
         producer = ContentProducerAgent(log_callback=self._log)
-        package = producer.run(topic, level, section, source_url=source_url)
+        package = producer.run(topic, level, section, source_url=source_url, today=today)
+
+        # ── 게이트 미통과 시 다운스트림 보류 (P0-2) ───────────────
+        if package.status == ArticleStatus.NEEDS_REVIEW:
+            self._log("")
+            self._log("=== Pipeline Halted: NEEDS REVIEW ===")
+            rr = package.review_report
+            if rr:
+                for issue in rr.factual_issues:
+                    self._log(f"    [사실오류] {issue}")
+                for issue in rr.temporal_issues:
+                    self._log(f"    [시제오류] {issue}")
+                if rr.notes:
+                    self._log(f"    사유: {rr.notes}")
+            self._log("    → 번역·이미지·시트 저장을 보류합니다. 편집자 확인 필요.")
+            return package, ""
 
         # ── Agent 2: 한국어 번역 ──────────────────────────────────
         translator = TranslatorAgent(log_callback=self._log)
@@ -76,6 +93,8 @@ class Orchestrator:
         self._log(f"    Vocabulary : {len(package.article.vocabulary)} words")
         self._log(f"    Sources    : {len(package.article.sources)}")
         self._log(f"    Plagiarism : {'PASS' if package.plagiarism_report.passed else 'WARNING'}")
+        if package.review_report:
+            self._log(f"    Review     : 사실·시제 통과 (재작성 {package.review_report.rewrite_count}회)")
         self._log(f"    Edits      : {len(package.editing_suggestions)} suggestions")
         self._log(f"    Crossword  : {len(package.crossword_sentences)} pairs")
         self._log(f"    Workbook   : {len(package.workbook_sets)} sets")

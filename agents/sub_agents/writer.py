@@ -31,12 +31,17 @@ class WriterAgent:
         section: Section,
         reference_format: str = "",
         source_content: str = "",
+        today: str = "",
+        revision_notes: str = "",
     ) -> ArticleResult:
         """
         topic : 기사 주제 또는 뉴스 URL
         level : 신문 레벨 (kinder/kids/junior/times)
         section : 섹션 (과학/환경 등)
         reference_format : netimes.co.kr에서 가져온 포맷 샘플 텍스트
+        source_content : ResearcherAgent가 수집한 출처 본문 (사실 근거)
+        today : 오늘 날짜 (YYYY-MM-DD) — 시제 검증용 (P0-3)
+        revision_notes : 재작성 시 게이트가 지적한 수정 사항 (P0-2)
         """
         self._log(f"[Writer] 기사 작성 시작 — [{level.value}] {topic[:50]}")
         cfg = LEVEL_CONFIG[level.value]
@@ -47,13 +52,31 @@ class WriterAgent:
             else ""
         )
         source_hint = (
-            f"\n\nSource article (use as factual reference — do NOT copy directly):\n{source_content[:2000]}"
+            f"\n\nResearched source material (use ONLY these facts — do NOT invent or "
+            f"rely on prior knowledge; do NOT copy sentences verbatim):\n{source_content[:6000]}"
             if source_content
+            else ""
+        )
+        # P0-3: 시제·시점 검증 지시
+        temporal_hint = (
+            f"\n\nTODAY'S DATE IS {today}. Critical temporal rule: compare every event "
+            f"date in the source material against today. An event that has ALREADY "
+            f"happened must be written in PAST tense with its actual outcome (from the "
+            f"sources). Never describe a finished event as upcoming (no \"is coming\", "
+            f"\"will be held\" for past events). Future events use future tense."
+            if today
+            else ""
+        )
+        # P0-2: 재작성 시 게이트 지적 사항 반영
+        revision_hint = (
+            f"\n\n[REVISION REQUIRED] The previous draft was rejected by the review gate "
+            f"for these issues. Fix every one:\n{revision_notes}"
+            if revision_notes
             else ""
         )
 
         prompt = f"""You are writing an article for {cfg['newspaper']}.
-{source_hint}
+{source_hint}{temporal_hint}{revision_hint}
 
 Topic: {topic}
 Section: {section.value}
@@ -64,14 +87,16 @@ Paragraphs: {cfg['paragraph_count']} paragraphs of roughly equal size
 {format_hint}
 
 Instructions:
-1. Search your knowledge for accurate, up-to-date information on this topic.
+1. Base every fact, figure, name, and date ONLY on the researched source material
+   above. Do not add information that is not supported by the sources.
 2. Write an article suitable for the readers' age and comprehension level.
 3. Include relevant vocabulary naturally in the text.
 4. Add one or two points that spark curiosity or deeper interest.
 5. Include background explanations where needed for younger readers.
 6. Write in a tone and style appropriate to {cfg['newspaper']}.
 7. At the end, list 3–5 key vocabulary words from the article.
-8. Provide 3 or more real source URLs used for the information.
+8. For "sources", list ONLY the source URLs provided in the researched material
+   above — do not invent or add decorative URLs.
 
 Respond in this exact JSON format:
 {{

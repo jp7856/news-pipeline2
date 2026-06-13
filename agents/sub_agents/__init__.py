@@ -3,6 +3,7 @@ from .editor import EditorAgent
 from .crossword import CrosswordAgent
 from .workbook import WorkbookAgent
 from .plagiarism_checker import PlagiarismCheckerAgent
+from .researcher import ResearcherAgent
 
 __all__ = [
     "WriterAgent",
@@ -10,4 +11,5 @@ __all__ = [
     "CrosswordAgent",
     "WorkbookAgent",
     "PlagiarismCheckerAgent",
+    "ResearcherAgent",
 ]
