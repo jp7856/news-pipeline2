@@ -131,6 +131,23 @@ def api_regenerate():
     return jsonify({"message": "Rebuild started"})
 
 
+@app.route("/api/health")
+def api_health():
+    """배포 진단 — 환경변수 설정 여부만 보고 (값은 노출하지 않음)."""
+    import os
+    keys = [
+        "ANTHROPIC_API_KEY", "GOOGLE_CSE_API_KEY", "GOOGLE_CSE_ID",
+        "GOOGLE_SHEETS_CREDENTIALS_JSON", "GOOGLE_SHEET_ID", "UNSPLASH_ACCESS_KEY",
+    ]
+    status = {k: bool(os.getenv(k, "").strip()) for k in keys}
+    return jsonify({
+        "ok": True,
+        "env": status,
+        "research_ready": status["GOOGLE_CSE_API_KEY"] and status["GOOGLE_CSE_ID"],
+        "sheets_ready": status["GOOGLE_SHEETS_CREDENTIALS_JSON"] and status["GOOGLE_SHEET_ID"],
+    })
+
+
 @app.route("/api/history")
 def api_history():
     return jsonify(_history)
