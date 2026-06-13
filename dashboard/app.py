@@ -168,6 +168,18 @@ def _serialize(pkg: ContentPackage, sheet_url: str = "") -> dict:
             for w in pkg.workbook_sets
         ],
         "image_url": pkg.image_url,
+        "image_query": pkg.image_query,
+        "image_selected": ({
+            "photographer": pkg.image_selected.photographer,
+            "source": pkg.image_selected.source,
+            "license": pkg.image_selected.license,
+            "page_url": pkg.image_selected.page_url,
+            "confirmed_date": pkg.image_selected.confirmed_date,
+        } if pkg.image_selected else None),
+        "image_candidates": [
+            {"url": c.url, "thumb": c.thumb, "photographer": c.photographer, "page_url": c.page_url}
+            for c in pkg.image_candidates
+        ],
         "sheet_url": sheet_url,
         "status": pkg.status.value if hasattr(pkg.status, "value") else str(pkg.status),
         "research": {

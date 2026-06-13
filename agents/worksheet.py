@@ -32,6 +32,7 @@ SHEET_COLUMNS = [
     "생성일시", "레벨", "섹션", "토픽", "단어수",
     "기사(영문)", "기사(한국어)", "요약(한국어)",
     "어휘", "출처", "표절검사", "이미지URL",
+    "이미지출처", "이미지라이선스", "이미지확인일",   # P1-3 라이선스 증빙
     "크로스워드", "워크북Set1", "워크북Set2",
 ]
 
@@ -138,6 +139,11 @@ class WorksheetAgent:
         wb1 = wb_json(pkg.workbook_sets[0]) if len(pkg.workbook_sets) > 0 else ""
         wb2 = wb_json(pkg.workbook_sets[1]) if len(pkg.workbook_sets) > 1 else ""
 
+        sel = pkg.image_selected
+        img_source = f"{sel.source} / {sel.photographer}" if sel else ""
+        img_license = sel.license if sel else ""
+        img_date = sel.confirmed_date if sel else ""
+
         return [
             datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             pkg.level.value,
@@ -151,6 +157,9 @@ class WorksheetAgent:
             "\n".join(pkg.article.sources),
             "PASS" if pkg.plagiarism_report.passed else "WARNING",
             pkg.image_url,
+            img_source,
+            img_license,
+            img_date,
             crossword,
             wb1,
             wb2,

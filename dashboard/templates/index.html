@@ -457,9 +457,29 @@
 
     function renderImageV2(r) {
       _currentImageUrl = r.image_url || "";
+      const sel = r.image_selected;
+      const licHtml = sel ? `
+        <div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px 12px;margin-top:10px;font-size:.78rem;color:#94a3b8">
+          <strong style="color:#cbd5e1">라이선스 증빙</strong><br>
+          검색어: ${esc(r.image_query || "")}<br>
+          촬영: ${esc(sel.photographer)} · 출처: ${esc(sel.source)}<br>
+          라이선스: ${esc(sel.license)}<br>
+          확인일: ${esc(sel.confirmed_date)} ·
+          <a href="${esc(sel.page_url)}" target="_blank" style="color:#60a5fa">원본 페이지</a>
+        </div>` : "";
+      const cands = (r.image_candidates || []);
+      const candHtml = cands.length > 1 ? `
+        <h2 style="margin-top:16px">후보 ${cands.length}건</h2>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          ${cands.map(c => `<img src="${esc(c.thumb || c.url)}" title="${esc(c.photographer)}"
+              style="width:90px;height:60px;object-fit:cover;border-radius:6px;cursor:pointer;border:2px solid ${c.url===_currentImageUrl?'#3b82f6':'#334155'}"
+              onclick="openLightbox('${esc(c.url)}')">`).join("")}
+        </div>` : "";
       document.getElementById("panel-image-v2").innerHTML = `
-        <h2>이미지 V2 — Unsplash 직접 검색</h2>
+        <h2>이미지 V2 — Unsplash 자동 추천 + 직접 검색</h2>
         ${_imagePreviewHtml(_currentImageUrl, "img-wrap-v2", "img-badge-v2", "img-url-v2")}
+        ${licHtml}
+        ${candHtml}
         <div style="margin-top:16px">
           <a class="btn-search" href="https://jp7856.github.io/ne-times-image-finder/" target="imazine-popup"
              style="background:#3b82f6"

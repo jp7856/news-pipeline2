@@ -190,6 +190,19 @@ class WorkbookSet:
 
 
 @dataclass
+class ImageCandidate:
+    """이미지 후보 1건 + 라이선스 증빙 (P1-3)"""
+    url: str
+    thumb: str = ""
+    description: str = ""
+    photographer: str = ""
+    source: str = ""          # 예: "Unsplash"
+    license: str = ""         # 예: "Unsplash License"
+    page_url: str = ""        # 출처 페이지 (귀속 표기용)
+    confirmed_date: str = ""  # 확인일 YYYY-MM-DD
+
+
+@dataclass
 class PlagiarismReport:
     """PlagiarismCheckAgent의 검사 결과"""
     passed: bool
@@ -209,8 +222,11 @@ class ContentPackage:
     crossword_sentences: list[CrosswordSentencePair]
     workbook_sets: list[WorkbookSet]       # 반드시 2세트
 
-    # Agent 3: 이미지
+    # Agent 3: 이미지 (P1-3)
     image_url: str = ""
+    image_query: str = ""                                       # 주제·핵심장면 기반 검색어
+    image_candidates: list[ImageCandidate] = field(default_factory=list)
+    image_selected: Optional[ImageCandidate] = None             # 추천 이미지 + 라이선스 증빙
 
     # Agent 0: 리서치 (P0-1)
     research: Optional[ResearchResult] = None
