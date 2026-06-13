@@ -25,11 +25,12 @@ import anthropic
 import requests
 from bs4 import BeautifulSoup
 
-from config import ANTHROPIC_API_KEY
+from config import ANTHROPIC_API_KEY, get_page_config
 from models import (
     ContentPackage, Level, Section, ArticleStatus, ReviewReport,
     PlagiarismReport,
 )
+from agents.sub_agents.validation import ms_word_count
 from agents.sub_agents import (
     WriterAgent,
     PlagiarismCheckerAgent,
@@ -68,8 +69,13 @@ class ContentProducerAgent:
         section: Section,
         source_url: str = "",
         today: str = "",
+        page: str = "",
     ) -> ContentPackage:
-        self._log(f"[Agent1] 콘텐츠 제작 시작 — [{level.value}/{section.value}] {topic[:60]}")
+        page_cfg = get_page_config(level.value, page or None)
+        self._log(
+            f"[Agent1] 콘텐츠 제작 시작 — [{level.value}/{section.value}] "
+            f"{page_cfg['page']}({page_cfg['template']}) {topic[:50]}"
+        )
 
         reference = self._get_reference_format()
 
@@ -86,25 +92,27 @@ class ContentProducerAgent:
                 ),
             )
 
-        # ── Step 1: 기사 작성 (출처 + 오늘 날짜 기반) ─────────────
+        # ── Step 1: 기사 작성 (출처 + 오늘 날짜 + 지면 규격 기반) ──
         article = self._writer.run(
             topic, level, section,
             reference_format=reference,
             source_content=research.combined_text,
             today=today,
+            page_cfg=page_cfg,
         )
         # 출처는 실제 fetch한 URL로 고정 (P0-1 수용기준 ①)
         article.sources = research.urls
 
-        # ── Step 2: 게이트 루프 (표절 + 사실·시제) (P0-2/P0-3) ────
+        # ── Step 2: 게이트 루프 (표절 + 사실·시제 + 단어수) ───────
         plagiarism_report = None
         review_report = None
         rewrites = 0
         while True:
             plagiarism_report = self._plagcheck.run(article)
             review_report = self._reviewer.run(article, research, today)
+            wc_ok, wc_note = self._check_word_count(article, page_cfg)  # P1-1
 
-            if plagiarism_report.passed and review_report.passed:
+            if plagiarism_report.passed and review_report.passed and wc_ok:
                 break
             if rewrites >= MAX_REWRITES:
                 # 미해결 → 다운스트림 보류
@@ -119,6 +127,8 @@ class ContentProducerAgent:
 
             rewrites += 1
             notes = self._build_revision_notes(plagiarism_report, review_report)
+            if not wc_ok:
+                notes = (notes + "\n" + wc_note).strip()
             self._log(f"[Agent1] 게이트 미통과 — 재작성 {rewrites}/{MAX_REWRITES}")
             article = self._writer.run(
                 topic, level, section,
@@ -126,6 +136,7 @@ class ContentProducerAgent:
                 source_content=research.combined_text,
                 today=today,
                 revision_notes=notes,
+                page_cfg=page_cfg,
             )
             article.sources = research.urls
 
@@ -160,6 +171,20 @@ class ContentProducerAgent:
         )
 
     # ------------------------------------------------------------------
+
+    def _check_word_count(self, article, page_cfg: dict) -> tuple[bool, str]:
+        """P1-1: 단어수를 지면 규격과 비교. 벗어나면 재조정 지시를 만든다."""
+        lo, hi = page_cfg.get("word_min", 0), page_cfg.get("word_max", 10000)
+        wc = ms_word_count(article.text)
+        article.word_count = wc
+        if lo <= wc <= hi:
+            return True, ""
+        if wc < lo:
+            note = f"- WORD COUNT: {wc} words is too short. Expand to {lo}-{hi} words without padding."
+        else:
+            note = f"- WORD COUNT: {wc} words is too long. Trim to {lo}-{hi} words; cut least-essential detail."
+        self._log(f"[Agent1] 단어수 {wc} (목표 {lo}-{hi}) — 재조정 필요")
+        return False, note
 
     def _build_revision_notes(self, plag: PlagiarismReport, review: ReviewReport) -> str:
         lines = []

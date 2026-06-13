@@ -33,6 +33,7 @@ class WriterAgent:
         source_content: str = "",
         today: str = "",
         revision_notes: str = "",
+        page_cfg: dict | None = None,
     ) -> ArticleResult:
         """
         topic : 기사 주제 또는 뉴스 URL
@@ -42,9 +43,29 @@ class WriterAgent:
         source_content : ResearcherAgent가 수집한 출처 본문 (사실 근거)
         today : 오늘 날짜 (YYYY-MM-DD) — 시제 검증용 (P0-3)
         revision_notes : 재작성 시 게이트가 지적한 수정 사항 (P0-2)
+        page_cfg : 지면 설정 (P1-1) — 단어수 범위·구조·CEFR·소제목 수
         """
         self._log(f"[Writer] 기사 작성 시작 — [{level.value}] {topic[:50]}")
         cfg = LEVEL_CONFIG[level.value]
+
+        # P1-1: 지면 설정이 있으면 단어수·CEFR·구조를 지면 기준으로 덮어쓴다
+        if page_cfg:
+            word_range = f"{page_cfg['word_min']}-{page_cfg['word_max']}"
+            cefr = page_cfg.get("cefr") or cfg["cefr"]
+            sub = page_cfg.get("subheadings", 0)
+            para_hint = (
+                f"Use exactly {sub} subheadings."
+                if sub else "Paragraphs only, no subheadings."
+            )
+            structure_hint = (
+                f"\n\nPage: {page_cfg.get('page','')} ({page_cfg.get('template','')}). "
+                f"Required structure:\n{page_cfg.get('structure','')}"
+            )
+        else:
+            word_range = cfg["word_count_range"]
+            cefr = cfg["cefr"]
+            para_hint = f"{cfg['paragraph_count']} paragraphs of roughly equal size"
+            structure_hint = ""
 
         format_hint = (
             f"\n\nFormat reference from NE Times:\n{reference_format[:800]}"
@@ -76,14 +97,14 @@ class WriterAgent:
         )
 
         prompt = f"""You are writing an article for {cfg['newspaper']}.
-{source_hint}{temporal_hint}{revision_hint}
+{source_hint}{temporal_hint}{revision_hint}{structure_hint}
 
 Topic: {topic}
 Section: {section.value}
 Target readers: {cfg['target']}
-CEFR level: {cfg['cefr']}
-Target word count: {cfg['word_count_range']} words (Microsoft Word standard)
-Paragraphs: {cfg['paragraph_count']} paragraphs of roughly equal size
+CEFR level: {cefr}
+Target word count: {word_range} words (Microsoft Word standard — count strictly)
+Paragraphs: {para_hint}
 {format_hint}
 
 Instructions:

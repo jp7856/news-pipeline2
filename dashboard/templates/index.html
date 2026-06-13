@@ -131,6 +131,7 @@
         <option value="{{sc.value}}">{{sc.label}}</option>
         {% endfor %}
       </select>
+      <select id="page" title="지면 선택 (P1-1)"></select>
       <button id="btn-run" onclick="runPipeline()">Generate</button>
       <button style="background:#1e293b;color:#94a3b8;border:1px solid #334155" onclick="openHistory()">모두 보기</button>
     </div>
@@ -197,6 +198,18 @@
 
     socket.on("connect", () => { _mySid = socket.id; });
 
+    // ── 지면 선택 (P1-1) ──────────────────────────────────────────
+    const PAGES = {{ pages | tojson }};
+    function refreshPages() {
+      const lv = document.getElementById("level").value;
+      const sel = document.getElementById("page");
+      const list = PAGES[lv] || [];
+      sel.innerHTML = list.map(p => `<option value="${p.page}">${p.label}</option>`).join("")
+        || `<option value="">기본</option>`;
+    }
+    document.getElementById("level").addEventListener("change", refreshPages);
+    refreshPages();
+
     // Tab switching
     document.querySelectorAll(".tab").forEach(tab => {
       tab.addEventListener("click", () => {
@@ -251,6 +264,7 @@
           section: document.getElementById("section").value,
           sid: _mySid,
           source_url: document.getElementById("source-url").value.trim(),
+          page: document.getElementById("page").value,
         }),
       });
       if (!resp.ok) {

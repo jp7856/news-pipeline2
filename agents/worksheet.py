@@ -1,8 +1,15 @@
-"""Agent 4: Google Sheets 저장 — ContentPackage를 스프레드시트에 기록한다."""
+"""Agent 4: Google Sheets 저장 — ContentPackage를 스프레드시트에 기록한다.
 
+P1-4: credentials는 GOOGLE_SHEETS_CREDENTIALS_JSON(서비스계정 JSON 문자열) 우선
+사용으로 통일. 저장 실패 시 로컬 CSV로 백업하여 데이터 유실을 막는다.
+"""
+
+import csv
 import json
 import logging
 import os
+from datetime import datetime
+from pathlib import Path
 from typing import Callable
 
 import gspread
@@ -17,6 +24,9 @@ SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive",
 ]
+
+# 저장 실패 시 백업 디렉토리 (프로젝트 루트/sheet_backups)
+BACKUP_DIR = Path(__file__).resolve().parent.parent / "sheet_backups"
 
 SHEET_COLUMNS = [
     "생성일시", "레벨", "섹션", "토픽", "단어수",
@@ -38,15 +48,21 @@ class WorksheetAgent:
         """
         self._log("[Agent4] Google Sheets 저장 시작")
         sheet_url = ""
+        row = self._package_to_row(package)
         try:
             sheet = self._get_sheet()
             self._ensure_header(sheet)
-            row = self._package_to_row(package)
             sheet.append_row(row, value_input_option="USER_ENTERED")
             sheet_url = f"https://docs.google.com/spreadsheets/d/{GOOGLE_SHEET_ID}"
             self._log(f"[Agent4] 저장 완료 → {sheet_url}")
         except Exception as e:
-            self._log(f"[Agent4] 저장 오류: {e}")
+            # P1-4: 실패 시 로컬 CSV 백업 (데이터 유실 방지)
+            self._log(f"[Agent4] 시트 저장 실패 — CSV 백업으로 전환: {e}")
+            backup = self._backup_csv(row)
+            if backup:
+                self._log(f"[Agent4] CSV 백업 완료 → {backup}")
+            else:
+                self._log("[Agent4] CSV 백업도 실패 — 데이터 미저장")
         return package, sheet_url
 
     # ------------------------------------------------------------------
@@ -55,19 +71,46 @@ class WorksheetAgent:
         if self._sheet is not None:
             return self._sheet
 
-        # Railway env var는 JSON 문자열, 로컬은 파일 경로 둘 다 지원
-        creds_val = GOOGLE_SHEETS_CREDENTIALS_JSON
-        try:
-            creds_dict = json.loads(creds_val)
-            creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
-        except (json.JSONDecodeError, TypeError):
-            # 파일 경로로 시도
-            creds = Credentials.from_service_account_file(creds_val, scopes=SCOPES)
-
+        creds = self._load_credentials()
         gc = gspread.authorize(creds)
         spreadsheet = gc.open_by_key(GOOGLE_SHEET_ID)
         self._sheet = spreadsheet.sheet1
         return self._sheet
+
+    def _load_credentials(self) -> Credentials:
+        """GOOGLE_SHEETS_CREDENTIALS_JSON(서비스계정 JSON 문자열)을 우선 사용한다.
+        JSON 파싱이 안 되면 파일 경로로 간주(로컬 개발 호환)."""
+        creds_val = (GOOGLE_SHEETS_CREDENTIALS_JSON or "").strip()
+        if not creds_val:
+            raise RuntimeError(
+                "GOOGLE_SHEETS_CREDENTIALS_JSON 미설정 — Railway 환경변수에 "
+                "서비스계정 JSON 전체를 넣어주세요."
+            )
+        try:
+            creds_dict = json.loads(creds_val)
+            return Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
+        except (json.JSONDecodeError, TypeError):
+            if os.path.exists(creds_val):
+                return Credentials.from_service_account_file(creds_val, scopes=SCOPES)
+            raise RuntimeError(
+                "GOOGLE_SHEETS_CREDENTIALS_JSON 값이 유효한 JSON도, 존재하는 파일 경로도 아닙니다."
+            )
+
+    def _backup_csv(self, row: list) -> str | None:
+        """저장 실패 시 로컬 CSV에 행을 누적 기록한다."""
+        try:
+            BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+            path = BACKUP_DIR / f"backup_{datetime.now().strftime('%Y%m%d')}.csv"
+            new_file = not path.exists()
+            with open(path, "a", newline="", encoding="utf-8-sig") as f:
+                writer = csv.writer(f)
+                if new_file:
+                    writer.writerow(SHEET_COLUMNS)
+                writer.writerow(row)
+            return str(path)
+        except Exception as e:
+            logger.error(f"CSV 백업 실패: {e}")
+            return None
 
     def _ensure_header(self, sheet: gspread.Worksheet) -> None:
         first_row = sheet.row_values(1)
@@ -75,8 +118,6 @@ class WorksheetAgent:
             sheet.insert_row(SHEET_COLUMNS, index=1)
 
     def _package_to_row(self, pkg: ContentPackage) -> list:
-        from datetime import datetime
-
         crossword = json.dumps(
             [{"word": c.word, "ko": c.korean_definition,
               "b1": c.sentence_b1, "b1b2": c.sentence_b1_b2}

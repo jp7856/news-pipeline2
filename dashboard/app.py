@@ -37,9 +37,18 @@ _history: list[dict] = []
 
 @app.route("/")
 def index():
+    from config import PAGE_CONFIG
     levels = [{"value": lv.value, "label": lv.value.upper()} for lv in Level]
     sections = [{"value": sc.value, "label": sc.value} for sc in Section]
-    return render_template("index.html", levels=levels, sections=sections)
+    # 신문별 지면 목록 (P1-1) — 프론트에서 레벨 선택 시 지면 드롭다운 갱신
+    pages = {
+        paper: [
+            {"page": p["page"], "label": f"{p['page']} · {p['internal_level']}/{p['cefr']} · {p['word_min']}-{p['word_max']}w"}
+            for p in plist
+        ]
+        for paper, plist in PAGE_CONFIG.items()
+    }
+    return render_template("index.html", levels=levels, sections=sections, pages=pages)
 
 
 @app.route("/api/run", methods=["POST"])
@@ -50,6 +59,7 @@ def api_run():
     level_str = data.get("level", "junior")
     section_str = data.get("section", "환경")
     source_url = data.get("source_url", "").strip()
+    page = data.get("page", "").strip()
 
     if not topic and not source_url:
         return jsonify({"error": "Topic or source URL is required."}), 400
@@ -66,7 +76,7 @@ def api_run():
 
     _running[sid] = True
     thread = threading.Thread(
-        target=_run_pipeline, args=(sid, topic, level, section, source_url), daemon=True
+        target=_run_pipeline, args=(sid, topic, level, section, source_url, page), daemon=True
     )
     thread.start()
     return jsonify({"message": "Pipeline started"})
@@ -84,13 +94,13 @@ def api_history_item(idx):
     return jsonify(_history[idx])
 
 
-def _run_pipeline(sid: str, topic: str, level: Level, section: Section, source_url: str = ""):
+def _run_pipeline(sid: str, topic: str, level: Level, section: Section, source_url: str = "", page: str = ""):
     try:
         def emit_log(msg: str):
             socketio.emit("log", {"message": msg}, to=sid)
 
         orchestrator = Orchestrator(log_callback=emit_log)
-        pkg, sheet_url = orchestrator.run(topic, level, section, source_url=source_url)
+        pkg, sheet_url = orchestrator.run(topic, level, section, source_url=source_url, page=page)
         result = _serialize(pkg, sheet_url)
 
         # 히스토리에 저장

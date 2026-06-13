@@ -34,6 +34,7 @@ class Orchestrator:
         level: Level,
         section: Section,
         source_url: str = "",
+        page: str = "",
     ) -> ContentPackage:
         """
         단건 콘텐츠 제작 파이프라인을 실행한다.
@@ -55,7 +56,7 @@ class Orchestrator:
 
         # ── Agent 1: 콘텐츠 제작 (리서치+게이트 포함) ─────────────
         producer = ContentProducerAgent(log_callback=self._log)
-        package = producer.run(topic, level, section, source_url=source_url, today=today)
+        package = producer.run(topic, level, section, source_url=source_url, today=today, page=page)
 
         # ── 게이트 미통과 시 다운스트림 보류 (P0-2) ───────────────
         if package.status == ArticleStatus.NEEDS_REVIEW:
@@ -103,6 +104,42 @@ class Orchestrator:
         self._log(f"    Sheets     : {'저장완료' if self._sheet_url else '저장안됨'}")
 
         return package, self._sheet_url
+
+    def run_issue(
+        self,
+        topics: dict[str, str],
+        level: Level,
+        section: Section,
+    ) -> list[tuple[str, ContentPackage, str]]:
+        """1회분(complete set) 배치 생성 (P1-1).
+
+        topics : {지면명: 토픽} 매핑. 지정한 지면만 생성한다.
+        Returns: [(지면, ContentPackage, sheet_url), ...]
+        run sheet의 각 지면을 run()으로 1건씩 생성하고 요약을 로그로 남긴다.
+        """
+        from config import PAGE_CONFIG
+
+        pages = PAGE_CONFIG.get(level.value, [])
+        results: list[tuple[str, ContentPackage, str]] = []
+        self._log(f"=== Issue Batch Start: {level.value} ({len(topics)}개 지면) ===")
+
+        for pcfg in pages:
+            page_name = pcfg["page"]
+            if page_name not in topics:
+                continue
+            topic = topics[page_name]
+            self._log(f"\n--- [{page_name}] {topic[:50]} ---")
+            pkg, url = self.run(topic, level, section, page=page_name)
+            results.append((page_name, pkg, url))
+
+        # 1회분 요약표
+        self._log("\n=== Issue Summary ===")
+        self._log("지면 | 단어수 | 상태 | 표절")
+        for page_name, pkg, _ in results:
+            status = pkg.status.value if hasattr(pkg.status, "value") else str(pkg.status)
+            plag = "PASS" if pkg.plagiarism_report.passed else "WARN"
+            self._log(f"  {page_name} | {pkg.article.word_count} | {status} | {plag}")
+        return results
 
 
 def print_result(pkg: ContentPackage) -> None:
