@@ -148,7 +148,9 @@ class ContentProducerAgent:
 
         # ── Step 4 & 5: 크로스워드 + 워크북 (통과한 최종본 기준) ──
         crossword_sentences = self._crossword.run(article)
-        workbook_sets       = self._workbook.run(article, level)
+        workbook_sets       = self._workbook.run(
+            article, level, format_key=page_cfg.get("workbook_format")
+        )
 
         self._log(
             f"[Agent1] 완료 — 기사 {article.word_count}단어 / "

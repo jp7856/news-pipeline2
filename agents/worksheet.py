@@ -127,10 +127,12 @@ class WorksheetAgent:
 
         def wb_json(ws):
             return json.dumps({
-                "vocab": ws.vocabulary_activity,
-                "true_false": ws.true_false,
-                "comprehension": ws.comprehension_questions,
-                "discussion": ws.discussion_questions,
+                "format": ws.format_name or ws.format_key,
+                "activities": [
+                    {"label": a.label, "title": a.title,
+                     "instruction": a.instruction, "body": a.body, "answer": a.answer}
+                    for a in ws.activities
+                ],
             }, ensure_ascii=False)
 
         wb1 = wb_json(pkg.workbook_sets[0]) if len(pkg.workbook_sets) > 0 else ""

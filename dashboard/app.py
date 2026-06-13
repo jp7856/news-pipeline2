@@ -157,10 +157,13 @@ def _serialize(pkg: ContentPackage, sheet_url: str = "") -> dict:
         "workbook": [
             {
                 "set_number": w.set_number,
-                "vocabulary_activity": w.vocabulary_activity,
-                "true_false": w.true_false,
-                "comprehension_questions": w.comprehension_questions,
-                "discussion_questions": w.discussion_questions,
+                "format_key": w.format_key,
+                "format_name": w.format_name,
+                "activities": [
+                    {"label": a.label, "title": a.title, "instruction": a.instruction,
+                     "body": a.body, "answer": a.answer}
+                    for a in w.activities
+                ],
             }
             for w in pkg.workbook_sets
         ],

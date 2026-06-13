@@ -196,11 +196,9 @@ def print_result(pkg: ContentPackage) -> None:
 
     # 워크북
     for ws in pkg.workbook_sets:
-        print(f"\n[WORKBOOK SET {ws.set_number}]")
-        print(f"  Vocab Activity: {ws.vocabulary_activity[:100]}...")
-        print(f"  T/F: {len(ws.true_false)} items")
-        print(f"  Comprehension: {len(ws.comprehension_questions)} questions")
-        print(f"  Discussion: {len(ws.discussion_questions)} questions")
+        print(f"\n[WORKBOOK SET {ws.set_number}] ({ws.format_name or ws.format_key})")
+        for a in ws.activities:
+            print(f"  {a.label}. {a.title}: {a.body[:80]}...")
 
 
 if __name__ == "__main__":

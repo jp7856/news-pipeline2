@@ -382,27 +382,19 @@
         ${cwHtml}
       `;
 
-      // Workbook
+      // Workbook (P1-2: 레거시 8종 포맷, activity 구조)
       let wbHtml = "";
       for (const w of r.workbook) {
+        const acts = (w.activities || []).map(a => `
+          <div class="wb-section">
+            <h4>${esc(a.label)}. ${esc(a.title)}</h4>
+            ${a.instruction ? `<p style="color:#94a3b8;font-style:italic">${esc(a.instruction)}</p>` : ""}
+            <p style="white-space:pre-wrap">${esc(a.body)}</p>
+            ${a.answer ? `<p style="color:#4ade80;font-size:.8rem;margin-top:4px">정답: ${esc(a.answer)}</p>` : ""}
+          </div>`).join("");
         wbHtml += `<div class="wb-set">
-          <h3>Set ${w.set_number}</h3>
-          <div class="wb-section">
-            <h4>Vocabulary Activity</h4>
-            <p>${esc(w.vocabulary_activity)}</p>
-          </div>
-          <div class="wb-section">
-            <h4>True / False (${w.true_false.length})</h4>
-            <ul>${w.true_false.map(tf => `<li>${esc(tf.sentence)} <strong>[${tf.answer}]</strong></li>`).join("")}</ul>
-          </div>
-          <div class="wb-section">
-            <h4>Comprehension Questions (${w.comprehension_questions.length})</h4>
-            <ul>${w.comprehension_questions.map(q => `<li>${esc(q)}</li>`).join("")}</ul>
-          </div>
-          <div class="wb-section">
-            <h4>Discussion Questions (${w.discussion_questions.length})</h4>
-            <ul>${w.discussion_questions.map(q => `<li>${esc(q)}</li>`).join("")}</ul>
-          </div>
+          <h3>Set ${w.set_number} <span class="stat" style="margin-left:6px">${esc(w.format_name || w.format_key || "")}</span></h3>
+          ${acts || '<p style="color:#64748b">활동 없음</p>'}
         </div>`;
       }
       document.getElementById("panel-workbook").innerHTML = `

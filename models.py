@@ -159,13 +159,34 @@ class CrosswordSentencePair:
 
 
 @dataclass
+class WorkbookActivity:
+    """워크북 1개 액티비티 (포맷별 구조가 달라 자유 형식 본문으로 담는다)"""
+    label: str          # "A" / "B" / "C" / "D" / "Extra"
+    title: str          # 예: "Vocabulary Synonyms"
+    instruction: str    # 지시문
+    body: str           # 문항·보기 등 본문 (줄바꿈 포함 텍스트)
+    answer: str = ""    # 정답 키
+
+
+@dataclass
 class WorkbookSet:
-    """WorkbookAgent가 생성한 활동지 1세트"""
-    set_number: int                         # 1 또는 2
-    vocabulary_activity: str               # 어휘 활동
-    true_false: list[dict]                 # [{"sentence":..., "answer": T/F}]
-    comprehension_questions: list[str]     # 서술형 이해 문제
-    discussion_questions: list[str]        # 토론 문제 (1개 이상 개인 관점)
+    """WorkbookAgent가 생성한 활동지 1세트 (레거시 8종 포맷, P1-2)"""
+    set_number: int                                    # 1 또는 2
+    format_key: str = ""                               # WORKBOOK_FORMATS 키
+    format_name: str = ""                              # 사람이 읽는 포맷명
+    activities: list[WorkbookActivity] = field(default_factory=list)
+
+    # ── 하위 호환 접근자 (기존 직렬화/렌더링 코드 보호) ──
+    @property
+    def comprehension_questions(self) -> list[str]:
+        for a in self.activities:
+            if "comprehension" in a.title.lower() or a.label.upper() == "D":
+                return [ln for ln in a.body.split("\n") if ln.strip()]
+        return []
+
+    @property
+    def discussion_questions(self) -> list[str]:
+        return []
 
 
 @dataclass
