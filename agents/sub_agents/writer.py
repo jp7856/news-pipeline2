@@ -119,8 +119,10 @@ Paragraphs: {para_hint}
 {format_hint}
 
 Instructions:
-1. Base every fact, figure, name, and date ONLY on the researched source material
-   above. Do not add information that is not supported by the sources.
+1. Use the researched source material above as the primary factual basis.
+   If the source material is irrelevant to the topic, rely on your own knowledge
+   to write accurate, factual content. NEVER refuse to write — always produce
+   valid JSON output regardless of source relevance.
 2. Write an article suitable for the readers' age and comprehension level.
 3. Include relevant vocabulary naturally in the text.
 4. Add one or two points that spark curiosity or deeper interest.

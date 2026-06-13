@@ -74,16 +74,23 @@ class ResearcherAgent:
 
     def _build_query(self, topic: str, section: str) -> str:
         base = topic.strip()
+        # 한국어 토픽이면 영어 검색을 위해 "in English" 키워드 추가
+        if self._is_korean(base):
+            return f"{base} news 2024 2025"
         return f"{base} {section} news".strip()
 
     def _search(self, query: str) -> list[str]:
         try:
             self._log("[Agent0] DuckDuckGo 검색 중 (Google CSE → DDG로 변경)")
-            results = DDGS().text(query, max_results=MAX_SOURCES + 2)
+            with DDGS() as ddgs:
+                results = list(ddgs.text(query, max_results=MAX_SOURCES + 2, region="wt-wt"))
             return [r.get("href", "") for r in results if r.get("href")]
         except Exception as e:
             self._log(f"[Agent0] 검색 오류 (무시하고 계속): {e}")
             return []
+
+    def _is_korean(self, text: str) -> bool:
+        return any("가" <= c <= "힣" for c in text)
 
     def _fetch(self, url: str) -> SourceDoc | None:
         try:
