@@ -44,7 +44,7 @@ from agents.reviewer import ReviewerAgent
 logger = logging.getLogger(__name__)
 
 NETIMES_SAMPLE_URL = "https://www.netimes.co.kr"
-MAX_REWRITES = 2   # 최초 작성 + 최대 2회 재작성 = 총 3회
+MAX_REWRITES = 3   # 최초 작성 + 최대 3회 재작성 (요구사항서: 최대 2~3회)
 
 
 class ContentProducerAgent:
@@ -125,15 +125,21 @@ class ContentProducerAgent:
             if plagiarism_report.passed and review_report.passed and wc_ok:
                 break
             if rewrites >= MAX_REWRITES:
-                # 미해결 → 다운스트림 보류
+                # 차단 사유는 안전 항목(사실·시제·표절)뿐 — 단어수는 품질 경고로만 처리
+                safety_blocked = (not plagiarism_report.passed) or (not review_report.passed)
                 review_report.rewrite_count = rewrites
-                review_report.needs_human_review = True
-                self._log(f"[Agent1] {rewrites}회 재작성 후에도 미해결 — NEEDS_REVIEW")
-                return self._halt_package(
-                    topic, level, section,
-                    article=article, research=research,
-                    plagiarism=plagiarism_report, review=review_report,
-                )
+                if safety_blocked:
+                    review_report.needs_human_review = True
+                    self._log(f"[Agent1] {rewrites}회 재작성 후에도 미해결 — NEEDS_REVIEW")
+                    return self._halt_package(
+                        topic, level, section,
+                        article=article, research=research,
+                        plagiarism=plagiarism_report, review=review_report,
+                    )
+                # 사실·시제·표절은 통과, 단어수만 미달 → 경고와 함께 진행
+                if not wc_ok:
+                    self._log(f"[Agent1] 단어수 미세 미달이나 안전 검수 통과 — 경고 후 진행: {wc_note}")
+                break
 
             rewrites += 1
             notes = self._build_revision_notes(plagiarism_report, review_report)

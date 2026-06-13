@@ -112,7 +112,9 @@ Topic: {topic}
 Section: {section.value}
 Target readers: {cfg['target']}
 CEFR level: {cefr}
-Target word count: {word_range} words (Microsoft Word standard — count strictly)
+Target word count: {word_range} words (Microsoft Word standard — count strictly).
+  This is a HARD limit: the article must not exceed the upper bound. Count your
+  words before finalizing and trim to fit. Going over is a failure.
 Paragraphs: {para_hint}
 {format_hint}
 

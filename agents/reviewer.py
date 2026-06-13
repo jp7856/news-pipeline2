@@ -48,16 +48,27 @@ RESEARCHED SOURCES:
 {sources}
 \"\"\"
 
+STRICT RULE FOR LISTING ISSUES:
+Only put an item in factual_issues if it is a GENUINE BLOCKING error — a claim that
+directly CONTRADICTS the sources, or a concrete fact (number/date/name) with NO
+support in the sources. Do NOT list:
+- omissions or extra context ("the source also mentions...", "worth noting...")
+- items you conclude are actually accurate or "not a blocking error"
+- editorial/style preferences
+If you find yourself explaining why something is NOT an error, do not include it.
+An empty list means no blocking issues. Educational simplification of true facts is
+acceptable and is NOT an issue.
+
 Respond in this exact JSON format (no double quotes inside string values):
 {{
   "passed": true or false,
-  "factual_issues": ["specific issue 1", "..."],
-  "temporal_issues": ["specific issue 1", "..."],
+  "factual_issues": ["only genuine contradictions/unsupported facts"],
+  "temporal_issues": ["only real tense/timing errors vs today"],
   "notes": "one-line summary"
 }}
 
-Set passed=false if there is ANY factual_issue or temporal_issue. If sources are
-empty, flag that every non-trivial claim is unverifiable."""
+passed=true when both lists are empty. passed=false only if at least one list has a
+genuine blocking issue. If sources are empty, treat key claims as unverifiable."""
 
 
 class ReviewerAgent:
