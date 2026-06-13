@@ -126,6 +126,11 @@
   <header>
     <h1>NE Times Content Pipeline</h1>
     <span class="badge" id="status-badge">Ready</span>
+    <div id="usage-meter" title="서버 기동 이후 누적 토큰·예상 비용" style="margin-left:auto;text-align:right;font-size:.78rem;color:#94a3b8;line-height:1.4">
+      <div style="color:#cbd5e1;font-weight:600">누적 사용량</div>
+      <div id="usage-tokens">0 tokens</div>
+      <div id="usage-cost" style="color:#4ade80;font-weight:600">$0.0000</div>
+    </div>
   </header>
 
   <main>
@@ -206,7 +211,18 @@
     const btnRun = document.getElementById("btn-run");
     let _mySid = "";
 
-    socket.on("connect", () => { _mySid = socket.id; });
+    socket.on("connect", () => { _mySid = socket.id; refreshUsage(); });
+
+    // ── 누적 토큰·비용 미터 ───────────────────────────────────────
+    function renderUsage(u) {
+      if (!u) return;
+      const t = (u.total_tokens || 0).toLocaleString();
+      document.getElementById("usage-tokens").textContent = `${t} tokens · ${u.calls || 0} calls`;
+      document.getElementById("usage-cost").textContent = `$${(u.cost_usd || 0).toFixed(4)}`;
+    }
+    async function refreshUsage() {
+      try { renderUsage(await (await fetch("/api/usage")).json()); } catch (e) {}
+    }
 
     // ── 지면 선택 (P1-1) ──────────────────────────────────────────
     const PAGES = {{ pages | tojson }};
@@ -238,10 +254,11 @@
       logBox.scrollTop = logBox.scrollHeight;
     });
 
-    socket.on("pipeline_done", ({result}) => {
+    socket.on("pipeline_done", ({result, usage}) => {
       _clientRunning = false;
       setRunning(false);
       renderResult(result);
+      renderUsage(usage);
     });
 
     socket.on("pipeline_error", ({error}) => {

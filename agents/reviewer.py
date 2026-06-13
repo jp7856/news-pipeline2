@@ -17,6 +17,7 @@ import anthropic
 from config import ANTHROPIC_API_KEY, CLAUDE_MODEL, SYSTEM_PROMPT
 from models import ArticleResult, ResearchResult, ReviewReport
 from agents.sub_agents.utils import parse_json
+from agents.token_meter import make_client
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +78,7 @@ class ReviewerAgent:
         client: anthropic.Anthropic | None = None,
         log_callback: Callable[[str], None] | None = None,
     ):
-        self._client = client or anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        self._client = client or make_client(ANTHROPIC_API_KEY)
         self._log = log_callback or (lambda msg: logger.info(msg))
 
     def run(

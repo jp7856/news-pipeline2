@@ -26,6 +26,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from config import ANTHROPIC_API_KEY, get_page_config
+from agents.token_meter import make_client
 from models import (
     ContentPackage, Level, Section, ArticleStatus, ReviewReport,
     PlagiarismReport,
@@ -50,7 +51,7 @@ MAX_REWRITES = 3   # 최초 작성 + 최대 3회 재작성 (요구사항서: 최
 class ContentProducerAgent:
     def __init__(self, log_callback: Callable[[str], None] | None = None):
         self._log = log_callback or (lambda msg: logger.info(msg))
-        self._client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        self._client = make_client(ANTHROPIC_API_KEY)
         self._reference_format_cache: str = ""
 
         # 서브에이전트 초기화 (클라이언트 공유)

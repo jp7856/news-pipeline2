@@ -6,6 +6,14 @@ load_dotenv(override=True)
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 CLAUDE_MODEL = "claude-sonnet-4-6"
 
+# ------------------------------------------------------------------
+# 토큰 단가 (USD per 1M tokens) — claude-sonnet-4-6 기준, env로 조정 가능
+# ------------------------------------------------------------------
+PRICE_INPUT_PER_M = float(os.getenv("PRICE_INPUT_PER_M", "3.0"))
+PRICE_OUTPUT_PER_M = float(os.getenv("PRICE_OUTPUT_PER_M", "15.0"))
+PRICE_CACHE_WRITE_PER_M = float(os.getenv("PRICE_CACHE_WRITE_PER_M", "3.75"))   # 입력 1.25x
+PRICE_CACHE_READ_PER_M = float(os.getenv("PRICE_CACHE_READ_PER_M", "0.30"))     # 입력 0.1x
+
 GOOGLE_SHEETS_CREDENTIALS_JSON = os.getenv("GOOGLE_SHEETS_CREDENTIALS_JSON", "credentials.json")
 GOOGLE_SHEET_ID = os.getenv("GOOGLE_SHEET_ID", "")
 

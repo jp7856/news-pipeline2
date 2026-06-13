@@ -13,6 +13,7 @@ from typing import Callable
 import anthropic
 
 from config import ANTHROPIC_API_KEY, CLAUDE_MODEL, SYSTEM_PROMPT
+from agents.token_meter import make_client
 from models import ContentPackage
 from agents.sub_agents.utils import parse_json
 
@@ -63,7 +64,7 @@ class TranslatorAgent:
         log_callback: Callable[[str], None] | None = None,
     ):
         self._log = log_callback or (lambda msg: logger.info(msg))
-        self._client = client or anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        self._client = client or make_client(ANTHROPIC_API_KEY)
 
     def run(self, package: ContentPackage) -> ContentPackage:
         """영어 기사를 한국어로 번역하고 ContentPackage에 결과를 추가한다."""

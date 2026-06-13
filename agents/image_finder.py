@@ -17,6 +17,7 @@ import requests
 from config import UNSPLASH_ACCESS_KEY, ANTHROPIC_API_KEY, CLAUDE_MODEL
 from models import ContentPackage, ImageCandidate
 from agents.sub_agents.utils import parse_json
+from agents.token_meter import make_client
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,7 @@ CANDIDATE_COUNT = 5
 class ImageFinderAgent:
     def __init__(self, log_callback: Callable[[str], None] | None = None):
         self._log = log_callback or (lambda msg: logger.info(msg))
-        self._client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        self._client = make_client(ANTHROPIC_API_KEY)
 
     def run(self, package: ContentPackage) -> ContentPackage:
         self._log("[Agent3] 이미지 탐색 시작")

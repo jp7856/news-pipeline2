@@ -121,7 +121,8 @@ def api_regenerate():
                 "topic": topic, "level": level.value, "section": section.value,
                 "result": result,
             })
-            socketio.emit("pipeline_done", {"result": result}, to=sid)
+            from agents.token_meter import meter
+            socketio.emit("pipeline_done", {"result": result, "usage": meter.snapshot()}, to=sid)
         except Exception as e:
             socketio.emit("pipeline_error", {"error": str(e)}, to=sid)
         finally:
@@ -129,6 +130,13 @@ def api_regenerate():
 
     threading.Thread(target=_job, daemon=True).start()
     return jsonify({"message": "Rebuild started"})
+
+
+@app.route("/api/usage")
+def api_usage():
+    """누적 토큰 사용량·비용 (서버 기동 이후)."""
+    from agents.token_meter import meter
+    return jsonify(meter.snapshot())
 
 
 @app.route("/api/health")
