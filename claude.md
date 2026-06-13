@@ -21,7 +21,7 @@ news-pipeline2/
 ├── orchestrator.py           # 오케스트레이터 (파이프라인 조율)
 ├── requirements.txt          # Python 의존성
 ├── runtime.txt               # Python 런타임 버전
-├── Procfile                  # Heroku 배포 설정
+├── Procfile                  # Railway 배포 설정 (web: python dashboard/app.py)
 ├── claude.md                 # 프로젝트 문서 (이 파일)
 ├── agents/                   # 메인 에이전트 모듈
 │   ├── __init__.py
@@ -36,9 +36,10 @@ news-pipeline2/
 │       ├── plagiarism_checker.py  # Sub-Agent 1-2: 표절 검사
 │       ├── editor.py         # Sub-Agent 1-3: 편집 제안
 │       ├── crossword.py      # Sub-Agent 1-4: 크로스워드 생성
-│       ├── workbook.py       # Sub-Agent 1-5: 워크북 세트 생성
-│       ├── utils.py          # 유틸리티 함수
-│       └── workbook.py       # 워크북 관련 로직
+│       ├── workbook.py       # Sub-Agent 1-5: 워크북 세트 생성 (레거시 8종 포맷)
+│       ├── researcher.py     # Sub-Agent 0: 실시간 리서치 (P0-1)
+│       ├── validation.py     # 단어수·인용·URL 검증 (스킬 validate.py 이식)
+│       └── utils.py          # 유틸리티 함수 (robust JSON 파서)
 ├── dashboard/                # 웹 대시보드
 │   ├── app.py                # Flask 애플리케이션
 │   ├── static/               # CSS, JavaScript 정적 자산
@@ -69,7 +70,7 @@ UNSPLASH_ACCESS_KEY    # Unsplash 이미지 검색 API
 | kinder | NE Times Kinder | A1 이하 | 5~8세 (유치원~초등저) | 80~120 | 3~4 |
 | kids | NE Times Kids | A2/A1-A2 | 9~12세 (초등고학년) | 150~200 | 4~5 |
 | junior | NE Times Junior | A2/A2-B1 | 11~14세 (중학생) | 200~280 | 5~6 |
-| times | NE Times | B1/B1-B2 | 15~18세 (고등학생) | 280~380 | 6~7 |
+| times | NE Times | L1=B1 / L2=B2 / L3=C1 (leveling.md 기준) | 15~18세 (고등학생) | 지면별 (PAGE_CONFIG) | 지면별 |
 
 ### 시스템 프롬프트 (SYSTEM_PROMPT)
 
@@ -279,12 +280,12 @@ GET  /api/status    # 실행 상태 조회
 
 | 항목 | 기술 |
 |------|------|
-| AI 모델 | Anthropic Claude Sonnet 4.0 |
+| AI 모델 | Anthropic claude-sonnet-4-6 |
 | 웹 프레임워크 | Flask, Flask-SocketIO |
 | 외부 API | Unsplash, Google Sheets, Google Custom Search |
 | 인증 | google-auth, gspread |
 | 데이터 처리 | BeautifulSoup4, lxml |
-| 배포 | Heroku (Procfile 기반) |
+| 배포 | Railway (Procfile 기반, GitHub 자동 배포) |
 
 ---
 
@@ -358,7 +359,7 @@ python dashboard/app.py
 3. Google Sheet 공유 설정 (서비스 계정 이메일)
 
 ### 자동 저장
-- 파이프라인 실행 후 자동으로 Google Sheets에 신행 추가
+- 파이프라인 실행 후 자동으로 Google Sheets에 신규 행 추가
 - 스프레드시트에서 실시간 콘텐츠 관리 가능
 
 ---
@@ -396,16 +397,16 @@ python dashboard/app.py
 
 ## 🔗 배포
 
-### Heroku 배포
+### Railway 배포
 
 ```bash
-# Procfile 이미 구성됨
-git push heroku main
+# Procfile 이미 구성됨 (web: python dashboard/app.py)
+# GitHub master 푸시 시 Railway가 자동 재배포
+git push origin master
 
-# 또는
-heroku create
-heroku config:set ANTHROPIC_API_KEY=sk_...
-git push heroku main
+# 환경변수는 Railway 대시보드 Variables 탭에서 설정:
+#   ANTHROPIC_API_KEY, GOOGLE_SHEETS_CREDENTIALS_JSON, GOOGLE_SHEET_ID,
+#   GOOGLE_CSE_API_KEY, GOOGLE_CSE_ID, UNSPLASH_ACCESS_KEY
 ```
 
 ---
