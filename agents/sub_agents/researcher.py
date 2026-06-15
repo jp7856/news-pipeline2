@@ -74,12 +74,20 @@ class ResearcherAgent:
 
     # ------------------------------------------------------------------
 
+    _SECTION_EN = {
+        "정치": "politics", "경제": "economy", "사회": "society",
+        "세계": "world", "과학": "science", "기술": "technology",
+        "환경": "environment", "건강": "health", "스포츠": "sports",
+        "교육": "education", "문화": "culture", "엔터테인먼트": "entertainment",
+        "비즈니스": "business", "사람": "people",
+    }
+
     def _build_query(self, topic: str, section: str) -> str:
         base = topic.strip()
         if self._is_korean(base):
             base = self._translate_to_english(base)
-            return base  # 한국어 토픽은 번역된 키워드만 사용 (section은 한국어라 제외)
-        return f"{base} {section}".strip()
+        sec = self._SECTION_EN.get(section.strip(), section.strip())
+        return f"{base} {sec}".strip()
 
     def _is_korean(self, text: str) -> bool:
         return any("가" <= c <= "힣" for c in text)
