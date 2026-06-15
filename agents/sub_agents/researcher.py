@@ -47,11 +47,12 @@ class ResearcherAgent:
                 seen_urls.add(source_url)
                 self._log(f"[Agent0] 제공 링크 수집: {doc.title[:40]}")
 
-        # 2) NewsAPI로 추가 출처 수집
+        # 2) NewsAPI로 추가 출처 수집 (제목 필터 통과 기사만)
         query = self._build_query(topic, section)
-        for url in self._search(query):
+        for item in self._search(query):
             if len(sources) >= MAX_SOURCES:
                 break
+            url = item["url"]
             if url in seen_urls:
                 continue
             doc = self._fetch(url)
@@ -109,48 +110,79 @@ class ResearcherAgent:
             self._log(f"[Agent0] 번역 실패, 원문 사용: {e}")
             return text
 
-    def _search(self, query: str) -> list[str]:
+    # 교육용으로 적합한 신뢰 도메인
+    _SAFE_DOMAINS = (
+        "bbc.com,reuters.com,apnews.com,nationalgeographic.com,"
+        "smithsonianmag.com,sciencenews.org,newscientist.com,"
+        "theguardian.com,npr.org,time.com,scientificamerican.com"
+    )
+
+    def _search(self, query: str) -> list[dict]:
+        """제목 관련성 사전 필터링된 {url, title} 목록 반환."""
         if not NEWSAPI_KEY:
             self._log("[Agent0] NEWSAPI_KEY 미설정")
             return []
         try:
             self._log("[Agent0] GSE 검색 차단으로 newsapi.org로 변경")
-            # 교육용 뉴스 도메인만 검색 — 성인/부적절 콘텐츠 차단
-            SAFE_DOMAINS = (
-                "bbc.com,reuters.com,apnews.com,nationalgeographic.com,"
-                "smithsonianmag.com,sciencenews.org,newscientist.com,"
-                "theguardian.com,npr.org,time.com,scientificamerican.com"
-            )
-            resp = requests.get(
-                NEWSAPI_URL,
-                params={
-                    "apiKey": NEWSAPI_KEY,
-                    "q": query,
-                    "language": "en",
-                    "sortBy": "relevancy",
-                    "pageSize": MAX_SOURCES + 2,
-                    "domains": SAFE_DOMAINS,
-                },
-                timeout=10,
-            )
-            if resp.status_code >= 400:
-                self._log(f"[Agent0] NewsAPI 오류 ({resp.status_code}): {resp.text[:200]}")
-                return []
-            articles = resp.json().get("articles", [])
-            urls = [a.get("url", "") for a in articles if a.get("url")]
-            self._log(f"[Agent0] 검색 결과 {len(urls)}건 수신")
-            return urls
+            candidates = self._fetch_newsapi(query, domains=self._SAFE_DOMAINS)
+            relevant = self._title_filter(candidates, query)
+            self._log(f"[Agent0] 교육 도메인 검색: {len(candidates)}건 → 제목 필터 후 {len(relevant)}건")
+
+            # 도메인 제한 결과가 부족하면 전체 도메인으로 재시도 (제목 필터 적용)
+            if len(relevant) < 2:
+                all_candidates = self._fetch_newsapi(query, domains=None)
+                all_relevant = self._title_filter(all_candidates, query)
+                self._log(f"[Agent0] 전체 도메인 재시도: {len(all_candidates)}건 → 제목 필터 후 {len(all_relevant)}건")
+                # 기존 결과 + 추가분 합치되 중복 제거
+                seen = {r["url"] for r in relevant}
+                for item in all_relevant:
+                    if item["url"] not in seen:
+                        relevant.append(item)
+                        seen.add(item["url"])
+            return relevant
         except Exception as e:
             self._log(f"[Agent0] 검색 오류 (무시하고 계속): {e}")
             return []
 
+    def _fetch_newsapi(self, query: str, domains: str | None) -> list[dict]:
+        params = {
+            "apiKey": NEWSAPI_KEY,
+            "q": query,
+            "language": "en",
+            "sortBy": "relevancy",
+            "pageSize": MAX_SOURCES * 3,
+        }
+        if domains:
+            params["domains"] = domains
+        resp = requests.get(NEWSAPI_URL, params=params, timeout=10)
+        if resp.status_code >= 400:
+            self._log(f"[Agent0] NewsAPI 오류 ({resp.status_code}): {resp.text[:200]}")
+            return []
+        articles = resp.json().get("articles", [])
+        return [{"url": a["url"], "title": a.get("title", "")}
+                for a in articles if a.get("url")]
+
+    def _title_filter(self, candidates: list[dict], query: str) -> list[dict]:
+        """제목에 검색어 키워드가 포함된 기사만 통과."""
+        keywords = [w.lower() for w in query.split() if len(w) > 2]
+        if not keywords:
+            return candidates
+        result = []
+        for item in candidates:
+            title_lower = item.get("title", "").lower()
+            if any(kw in title_lower for kw in keywords):
+                result.append(item)
+        return result
+
     def _is_relevant(self, doc: SourceDoc, query: str) -> bool:
-        """제목+본문에 검색어 단어가 1개 이상 포함되는지 간단 확인."""
+        """본문에도 검색어 키워드가 포함되는지 확인 (제목 필터 통과 후 2차 검증)."""
         keywords = [w.lower() for w in query.split() if len(w) > 2]
         if not keywords:
             return True
-        combined = (doc.title + " " + doc.text[:500]).lower()
-        return any(kw in combined for kw in keywords)
+        combined = (doc.title + " " + doc.text[:800]).lower()
+        # 키워드 중 절반 이상 포함돼야 통과
+        matches = sum(1 for kw in keywords if kw in combined)
+        return matches >= max(1, len(keywords) // 2)
 
     def _fetch(self, url: str) -> SourceDoc | None:
         try:
