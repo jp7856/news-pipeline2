@@ -4,8 +4,10 @@
 출처는 실제 fetch한 기사 URL만 기록한다. 출처 미확보 시 success=False로
 반환하여 파이프라인이 생성을 중단하도록 한다.
 
-원인 해결: F-1(실시간 웹 리서치 부재). config의 GOOGLE_CSE_API_KEY/
-GOOGLE_CSE_ID와 기존 의존성 BeautifulSoup4를 사용한다.
+[변경 이력]
+- 최초: Google Custom Search Engine (CSE) 사용
+- 변경: Google CSE API가 Google 계정 수준에서 지속 차단(403)되어
+  NewsAPI.org로 교체. 동일한 실시간 뉴스 검색 기능 제공.
 """
 
 import logging
@@ -14,12 +16,12 @@ from typing import Callable
 import requests
 from bs4 import BeautifulSoup
 
-from config import GOOGLE_CSE_API_KEY, GOOGLE_CSE_ID
+from config import NEWSAPI_KEY
 from models import ResearchResult, SourceDoc
 
 logger = logging.getLogger(__name__)
 
-CSE_URL = "https://www.googleapis.com/customsearch/v1"
+NEWSAPI_URL = "https://newsapi.org/v2/everything"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 MIN_BODY_CHARS = 200
@@ -44,7 +46,7 @@ class ResearcherAgent:
                 seen_urls.add(source_url)
                 self._log(f"[Agent0] 제공 링크 수집: {doc.title[:40]}")
 
-        # 2) Google CSE 검색으로 추가 출처 수집
+        # 2) NewsAPI로 추가 출처 수집
         query = self._build_query(topic, section)
         for url in self._search(query):
             if len(sources) >= MAX_SOURCES:
@@ -60,7 +62,7 @@ class ResearcherAgent:
         if not sources:
             note = (
                 "사용 가능한 출처를 확보하지 못했습니다. "
-                "(GOOGLE_CSE_API_KEY/GOOGLE_CSE_ID 미설정이거나 검색 결과 없음, "
+                "(NEWSAPI_KEY 미설정이거나 검색 결과 없음, "
                 "또는 기사 링크를 직접 입력해 주세요.)"
             )
             self._log(f"[Agent0] 리서치 실패 — {note}")
@@ -73,34 +75,32 @@ class ResearcherAgent:
 
     def _build_query(self, topic: str, section: str) -> str:
         base = topic.strip()
-        return f"{base} {section} news".strip()
+        return f"{base} {section}".strip()
 
     def _search(self, query: str) -> list[str]:
-        if not GOOGLE_CSE_API_KEY or not GOOGLE_CSE_ID:
+        if not NEWSAPI_KEY:
+            self._log("[Agent0] NEWSAPI_KEY 미설정")
             return []
         try:
+            self._log("[Agent0] NewsAPI 검색 중 (Google CSE → NewsAPI로 변경)")
             resp = requests.get(
-                CSE_URL,
+                NEWSAPI_URL,
                 params={
-                    "key": GOOGLE_CSE_API_KEY,
-                    "cx": GOOGLE_CSE_ID,
+                    "apiKey": NEWSAPI_KEY,
                     "q": query,
-                    "num": MAX_SOURCES + 2,
-                    "safe": "active",
+                    "language": "en",
+                    "sortBy": "publishedAt",
+                    "pageSize": MAX_SOURCES + 2,
                 },
                 timeout=10,
             )
             if resp.status_code >= 400:
-                reason = ""
-                try:
-                    err = resp.json().get("error", {})
-                    reason = err.get("message", "") or str(err.get("errors", ""))
-                except Exception:
-                    reason = resp.text[:200]
-                self._log(f"[Agent0] 검색 거부 ({resp.status_code}): {reason}")
+                self._log(f"[Agent0] NewsAPI 오류 ({resp.status_code}): {resp.text[:200]}")
                 return []
-            items = resp.json().get("items", [])
-            return [it.get("link", "") for it in items if it.get("link")]
+            articles = resp.json().get("articles", [])
+            urls = [a.get("url", "") for a in articles if a.get("url")]
+            self._log(f"[Agent0] 검색 결과 {len(urls)}건 수신")
+            return urls
         except Exception as e:
             self._log(f"[Agent0] 검색 오류 (무시하고 계속): {e}")
             return []
