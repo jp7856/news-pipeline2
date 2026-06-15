@@ -222,6 +222,37 @@ def api_usage():
     return jsonify(meter.snapshot())
 
 
+@app.route("/api/health/sheets")
+def api_health_sheets():
+    """구글시트 저장 실연결 진단 — 실제 시트 open을 시도하고 정확한 오류를 보고한다.
+    서비스계정 이메일을 함께 반환하여 어떤 계정을 시트에 공유해야 하는지 알려준다."""
+    import json as _json
+    from config import GOOGLE_SHEETS_CREDENTIALS_JSON, GOOGLE_SHEET_ID
+    out = {"sheet_id_set": bool((GOOGLE_SHEET_ID or "").strip()),
+           "service_account_email": None, "step": None, "ok": False, "error": None}
+    try:
+        # 1) 자격증명 파싱 + 서비스계정 이메일 추출
+        out["step"] = "credentials"
+        creds_val = (GOOGLE_SHEETS_CREDENTIALS_JSON or "").strip()
+        try:
+            out["service_account_email"] = _json.loads(creds_val).get("client_email")
+        except Exception:
+            pass
+
+        # 2) 실제 시트 open + 첫 행 읽기 시도
+        out["step"] = "open_sheet"
+        from agents.worksheet import WorksheetAgent
+        agent = WorksheetAgent()
+        sheet = agent._get_sheet()
+        out["step"] = "read"
+        title = sheet.title
+        rows = len(sheet.get_all_values())
+        out.update({"ok": True, "step": "done", "worksheet_title": title, "row_count": rows})
+    except Exception as e:
+        out["error"] = f"{type(e).__name__}: {e}"
+    return jsonify(out)
+
+
 @app.route("/api/health")
 def api_health():
     """배포 진단 — 환경변수 설정 여부만 보고 (값은 노출하지 않음)."""
