@@ -134,7 +134,10 @@ def api_regenerate():
 
 @app.route("/api/revise", methods=["POST"])
 def api_revise():
-    """AI 수정 — 기사 본문 + 수정 지시를 받아 Claude로 수정된 본문을 반환."""
+    """AI 어시스턴트 — 수정 지시 또는 질문을 받아 처리.
+    - 수정 요청: 기사 본문을 수정하고 revised_text 반환
+    - 질문: 기사에 대한 답변만 반환 (revised_text 없음)
+    """
     data = request.json
     article_text = (data.get("article_text") or "").strip()
     instruction = (data.get("instruction") or "").strip()
@@ -158,19 +161,28 @@ def api_revise():
         msg = client.messages.create(
             model=CLAUDE_MODEL,
             max_tokens=2000,
+            system=f"You are an expert editor for {cfg.get('newspaper','an educational newspaper')} targeting {cfg.get('target','')} at CEFR {cfg.get('cefr','')}. Answer in Korean.",
             messages=[{
                 "role": "user",
                 "content": (
-                    f"Revise this educational article for {cfg.get('newspaper','')}"
-                    f" according to the instruction.\n\n"
                     f"Article:\n{article_text}\n\n"
-                    f"Instruction: {instruction}\n\n"
-                    "Return ONLY the revised article text. No explanation, no JSON."
+                    f"User: {instruction}\n\n"
+                    "Determine if this is a REVISION REQUEST or a QUESTION.\n"
+                    "- If REVISION: respond with JSON {\"type\":\"revision\",\"message\":\"변경 내용 한 줄 요약\",\"revised_text\":\"전체 수정된 기사\"}\n"
+                    "- If QUESTION: respond with JSON {\"type\":\"answer\",\"message\":\"답변 내용\"}\n"
+                    "Respond ONLY with valid JSON."
                 ),
             }],
         )
-        revised = msg.content[0].text.strip()
-        return jsonify({"revised_text": revised})
+        import json as _json
+        raw = msg.content[0].text.strip()
+        # JSON 파싱
+        try:
+            result = _json.loads(raw)
+        except Exception:
+            # JSON 파싱 실패 시 답변으로 처리
+            result = {"type": "answer", "message": raw}
+        return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

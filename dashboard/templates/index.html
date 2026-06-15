@@ -421,6 +421,7 @@
           <button style="margin-left:auto;background:#16a34a;color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:.8rem;cursor:pointer" onclick="selectAlternate()">이 버전으로 저장·재생성</button>
         </div>` : ""}
         <div class="article-text" id="article-body">${esc(r.article.text || "(생성 보류됨)")}</div>
+        <div id="article-badges" style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap"></div>
         <h2 style="margin-top:20px">Vocabulary ${(r.article.vocabulary_detail && r.article.vocabulary_detail.length) ? `<span class="stat">${r.article.vocabulary_detail.length} words</span>` : ""}</h2>
         ${(r.article.vocabulary_detail && r.article.vocabulary_detail.length)
           ? `<div>${r.article.vocabulary_detail.map(v => `<span class="vocab-tag">${esc(v.word)} <span style="color:#64748b">${esc(v.cefr)}</span> · ${esc(v.meaning_ko)}</span>`).join("")}</div>`
@@ -531,23 +532,28 @@
     function openDraftBar() {
       document.getElementById("draft-bar").classList.add("open");
       document.getElementById("revise-input").value = "";
-      // 배지: word count + level/CEFR
+      // 배지: word count + level/CEFR → article 패널 아래에 표시
       const r = _lastResult;
       if (r) {
         const lv = r.level;
         const pageVal = document.getElementById("page").value;
         const pageList = PAGES[lv] || [];
         const pageCfg = pageList.find(p => p.page === pageVal) || pageList[0];
-        // label 예: "2면 · L2/B2 · 270-280w" → L2 · CEFR B2 파싱
         let cefrBadge = "";
         if (pageCfg) {
           const m = pageCfg.label.match(/·\s*([^·]+?)\s*·/);
           if (m) cefrBadge = m[1].trim();
         }
         const words = r.article.word_count || 0;
-        document.getElementById("draft-badges").innerHTML =
+        const badgeHtml =
           `<span class="draft-badge words">${words} words</span>` +
           (cefrBadge ? `<span class="draft-badge cefr">${esc(cefrBadge)}</span>` : "");
+        // article 패널 배지
+        const ab = document.getElementById("article-badges");
+        if (ab) ab.innerHTML = badgeHtml;
+        // 드래프트 배너 배지
+        const db = document.getElementById("draft-badges");
+        if (db) db.innerHTML = badgeHtml;
       }
     }
     function closeDraftBar() {
@@ -564,40 +570,75 @@
       regenerate(currentText);
     }
 
-    // AI 수정 — 지시 입력 → Claude 수정 → 초안 업데이트
+    // AI 어시스턴트 — 수정 지시 또는 질문 처리 + 로그에 대화 기록
     async function reviseArticle() {
       if (!_lastResult) return;
-      const instruction = document.getElementById("revise-input").value.trim();
-      if (!instruction) { alert("수정 지시를 입력하세요."); return; }
+      const input = document.getElementById("revise-input");
+      const instruction = input.value.trim();
+      if (!instruction) return;
       const body = document.getElementById("article-body");
       const currentText = body ? body.textContent.trim() : _lastResult.article.text;
       const btn = document.getElementById("btn-ai-revise");
       btn.disabled = true;
-      btn.textContent = "수정 중...";
+      btn.textContent = "처리 중...";
+
+      // 로그에 사용자 입력 기록
+      logBox.classList.remove("hidden");
+      const pUser = document.createElement("p");
+      pUser.style.color = "#93c5fd";
+      pUser.textContent = "▶ " + instruction;
+      logBox.appendChild(pUser);
+      logBox.scrollTop = logBox.scrollHeight;
+      input.value = "";
+
       try {
         const resp = await fetch("/api/revise", {
           method: "POST",
           headers: {"Content-Type": "application/json"},
-          body: JSON.stringify({
-            article_text: currentText,
-            instruction,
-            level: _lastResult.level,
-          }),
+          body: JSON.stringify({ article_text: currentText, instruction, level: _lastResult.level }),
         });
         const data = await resp.json();
-        if (!resp.ok) { alert("오류: " + data.error); return; }
-        // 수정된 본문으로 화면 업데이트 (탭 내 article-body만 교체)
-        if (body) body.textContent = data.revised_text;
-        // _lastResult에도 반영해 이후 진행 시 최신 본문 사용
-        _lastResult.article.text = data.revised_text;
-        document.getElementById("revise-input").value = "";
+        if (!resp.ok) {
+          const pErr = document.createElement("p");
+          pErr.style.color = "#f87171";
+          pErr.textContent = "오류: " + data.error;
+          logBox.appendChild(pErr);
+          return;
+        }
+        // 로그에 Claude 응답 기록
+        const pRes = document.createElement("p");
+        pRes.style.color = "#4ade80";
+        pRes.textContent = "◀ " + data.message;
+        logBox.appendChild(pRes);
+        logBox.scrollTop = logBox.scrollHeight;
+
+        // 수정 요청이면 article-body 업데이트
+        if (data.type === "revision" && data.revised_text) {
+          if (body) body.textContent = data.revised_text;
+          _lastResult.article.text = data.revised_text;
+          const pUpd = document.createElement("p");
+          pUpd.style.color = "#94a3b8";
+          pUpd.textContent = "  → 기사 본문이 업데이트됐습니다.";
+          logBox.appendChild(pUpd);
+          logBox.scrollTop = logBox.scrollHeight;
+        }
       } catch (e) {
-        alert("수정 실패: " + e.message);
+        const pErr = document.createElement("p");
+        pErr.style.color = "#f87171";
+        pErr.textContent = "오류: " + e.message;
+        logBox.appendChild(pErr);
       } finally {
         btn.disabled = false;
         btn.textContent = "AI 수정";
       }
     }
+
+    // 엔터키로 AI 수정 실행
+    document.addEventListener("DOMContentLoaded", () => {
+      document.getElementById("revise-input").addEventListener("keydown", (e) => {
+        if (e.key === "Enter") reviseArticle();
+      });
+    });
 
     // ── P2-2: 버전 토글/선택 ──────────────────────────────────────
     function showVersion(which) {
