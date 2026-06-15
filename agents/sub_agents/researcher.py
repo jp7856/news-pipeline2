@@ -86,8 +86,8 @@ class ResearcherAgent:
         base = topic.strip()
         if self._is_korean(base):
             base = self._translate_to_english(base)
-        sec = self._SECTION_EN.get(section.strip(), section.strip())
-        return f"{base} {sec}".strip()
+        # section 제외 — "doll society" 같은 무관한 결과 방지
+        return base
 
     def _is_korean(self, text: str) -> bool:
         return any("가" <= c <= "힣" for c in text)

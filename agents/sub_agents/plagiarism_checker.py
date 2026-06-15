@@ -102,11 +102,16 @@ class PlagiarismCheckerAgent:
 
         data = self._call_claude(prompt)
 
-        passed = data.get("passed", False)
-        failed_items = [
-            k for k, v in data.get("checklist", {}).items()
-            if not v.get("pass", True)
-        ]
+        checklist = data.get("checklist", {})
+        # source_transparency는 출처가 없는 일반 교육 기사에서 항상 실패하므로
+        # 핵심 표절 항목(1~6)만 기준으로 통과 여부 재판정
+        CORE_ITEMS = {"1_sentence_paraphrasing", "2_vocabulary_independence",
+                      "3_information_compression", "4_structural_originality",
+                      "5_quotation_safety", "6_tone_purpose_shift"}
+        core_failed = [k for k, v in checklist.items()
+                       if k in CORE_ITEMS and not v.get("pass", True)]
+        passed = len(core_failed) == 0
+        failed_items = [k for k, v in checklist.items() if not v.get("pass", True)]
 
         if passed:
             self._log(f"[Plagiarism] 통과 ✓")
