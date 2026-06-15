@@ -215,6 +215,75 @@ def api_revise():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/publish", methods=["POST"])
+def api_publish():
+    """발행 — 최종 콘텐츠를 ne-times-site 레포의 articles.json에 커밋한다.
+    GitHub Pages가 정적 파일을 그대로 서빙하므로 사이트에 즉시 반영된다."""
+    import json as _json
+    import base64
+    import requests as _rq
+    from config import GITHUB_TOKEN, GITHUB_SITE_REPO
+
+    data = request.json or {}
+    result = data.get("result")
+    if not result or not result.get("article"):
+        return jsonify({"error": "발행할 기사 데이터(result)가 없습니다."}), 400
+    if not GITHUB_TOKEN:
+        return jsonify({"error": "GITHUB_TOKEN 미설정 — Railway 환경변수에 GitHub 토큰을 넣어주세요."}), 500
+
+    art_in = result.get("article", {})
+    article = {
+        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "topic": result.get("topic", ""),
+        "level": result.get("level", ""),
+        "section": result.get("section", ""),
+        "image_url": result.get("image_url", ""),
+        "article": {
+            "text": art_in.get("text", ""),
+            "text_ko": art_in.get("text_ko", ""),
+            "summary_ko": art_in.get("summary_ko", ""),
+            "word_count": art_in.get("word_count", 0),
+            "vocabulary": art_in.get("vocabulary", []),
+        },
+    }
+
+    url = f"https://api.github.com/repos/{GITHUB_SITE_REPO}/contents/articles.json"
+    headers = {"Authorization": f"Bearer {GITHUB_TOKEN}",
+               "Accept": "application/vnd.github+json",
+               "X-GitHub-Api-Version": "2022-11-28"}
+    try:
+        # 1) 기존 articles.json 읽기 (없으면 새로 생성)
+        g = _rq.get(url, headers=headers, timeout=10)
+        if g.status_code == 200:
+            payload = g.json()
+            sha = payload.get("sha")
+            raw = base64.b64decode(payload.get("content", "")).decode("utf-8").strip()
+            arr = _json.loads(raw) if raw else []
+            if not isinstance(arr, list):
+                arr = []
+        elif g.status_code == 404:
+            sha, arr = None, []
+        else:
+            return jsonify({"error": f"GitHub 읽기 실패 ({g.status_code}): {g.text[:200]}"}), 500
+
+        arr.append(article)
+
+        # 2) 커밋
+        new_content = base64.b64encode(
+            _json.dumps(arr, ensure_ascii=False, indent=1).encode("utf-8")
+        ).decode("ascii")
+        body = {"message": f"publish: {article['topic'][:60]}", "content": new_content}
+        if sha:
+            body["sha"] = sha
+        p = _rq.put(url, headers=headers, json=body, timeout=15)
+        if p.status_code in (200, 201):
+            return jsonify({"ok": True, "count": len(arr),
+                            "site": "https://jp7856.github.io/ne-times-site/"})
+        return jsonify({"error": f"GitHub 커밋 실패 ({p.status_code}): {p.text[:200]}"}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/usage")
 def api_usage():
     """누적 토큰 사용량·비용 (서버 기동 이후)."""

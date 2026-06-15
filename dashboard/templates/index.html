@@ -182,6 +182,10 @@
          style="padding:10px 20px;background:#166534;color:#4ade80;border-radius:8px;font-size:.9rem;font-weight:500;text-decoration:none">
         📊 시트 열기
       </a>
+      <button id="btn-publish" class="hidden" onclick="publishArticle()"
+         style="margin-left:8px;padding:10px 20px;background:#7c3aed;color:#fff;border:none;border-radius:8px;font-size:.9rem;font-weight:600;cursor:pointer">
+        🌐 사이트에 발행
+      </button>
     </div>
 
     <!-- Log -->
@@ -568,6 +572,42 @@
         btnSheet.classList.remove("hidden");
       } else {
         btnSheet.classList.add("hidden");
+      }
+
+      // 발행 버튼 — Phase 2 완료(번역 존재)한 최종본에만 노출
+      const btnPub = document.getElementById("btn-publish");
+      if (r.article && r.article.text_ko) {
+        btnPub.classList.remove("hidden");
+      } else {
+        btnPub.classList.add("hidden");
+      }
+    }
+
+    // ── 사이트에 발행 ─────────────────────────────────────────────
+    async function publishArticle() {
+      if (!_lastResult) return;
+      if (!_lastResult.article || !_lastResult.article.text_ko) {
+        alert("이후 작업(번역 포함)을 먼저 완료한 뒤 발행할 수 있습니다."); return;
+      }
+      if (_lastResult.status === "검수필요") {
+        if (!confirm("이 기사는 검수를 통과하지 못했습니다. 그래도 발행할까요?")) return;
+      }
+      const btn = document.getElementById("btn-publish");
+      btn.disabled = true; const orig = btn.textContent; btn.textContent = "발행 중...";
+      try {
+        const resp = await fetch("/api/publish", {
+          method: "POST", headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({ result: _lastResult }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) { alert("발행 실패: " + data.error); return; }
+        if (confirm(`발행 완료! (총 ${data.count}건)\n사이트를 새 탭에서 열까요?`)) {
+          window.open(data.site, "_blank");
+        }
+      } catch (e) {
+        alert("발행 실패: " + e.message);
+      } finally {
+        btn.disabled = false; btn.textContent = orig;
       }
     }
 
