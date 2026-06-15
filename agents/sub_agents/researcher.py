@@ -78,6 +78,7 @@ class ResearcherAgent:
         base = topic.strip()
         if self._is_korean(base):
             base = self._translate_to_english(base)
+            return base  # 한국어 토픽은 번역된 키워드만 사용 (section은 한국어라 제외)
         return f"{base} {section}".strip()
 
     def _is_korean(self, text: str) -> bool:
