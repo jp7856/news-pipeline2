@@ -1,11 +1,12 @@
 """ResearcherAgent (Agent 0, P0-1) — 기사 작성 전 실시간 리서치.
 
-흐름: NewsAPI 검색 → 제목 관련성 필터 → 상위 2~4건 본문 수집 → Writer 컨텍스트 주입.
-관련 출처 미확보 시 Writer가 자체 지식으로 작성한다.
+흐름: Serper(Google 검색) → 제목 관련성 필터 → 상위 2~4건 본문 수집 → Writer 컨텍스트 주입.
+관련 출처 미확보 시 NewsAPI 폴백, 그래도 없으면 Writer가 자체 지식으로 작성한다.
 
 [변경 이력]
 - 최초: Google Custom Search Engine (CSE) 시도 → API 접근권 문제(403)로 미동작
-- 현재: NewsAPI.org 사용. 교육 도메인 우선, 부족하면 전체 도메인 재시도.
+- 중간: NewsAPI.org 사용
+- 현재: Serper.dev (Google 검색 API) 사용, 실패 시 NewsAPI 폴백
 """
 
 import logging
@@ -14,12 +15,13 @@ from typing import Callable
 import requests
 from bs4 import BeautifulSoup
 
-from config import NEWSAPI_KEY, ANTHROPIC_API_KEY, CLAUDE_MODEL
+from config import SERPER_API_KEY, NEWSAPI_KEY, ANTHROPIC_API_KEY, CLAUDE_MODEL
 from agents.token_meter import make_client
 from models import ResearchResult, SourceDoc
 
 logger = logging.getLogger(__name__)
 
+SERPER_URL = "https://google.serper.dev/search"
 NEWSAPI_URL = "https://newsapi.org/v2/everything"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
@@ -110,7 +112,36 @@ class ResearcherAgent:
             return text
 
     def _search(self, query: str) -> list[dict]:
+        """Serper(Google) 우선 검색, 실패 시 NewsAPI 폴백."""
+        if SERPER_API_KEY:
+            results = self._search_serper(query)
+            if results:
+                return results
+            self._log("[Agent0] Serper 결과 없음 — NewsAPI 폴백")
+        else:
+            self._log("[Agent0] SERPER_API_KEY 미설정 — NewsAPI 사용")
         return self._search_newsapi(query)
+
+    def _search_serper(self, query: str) -> list[dict]:
+        try:
+            self._log(f"[Agent0] Serper(Google) 검색: {query}")
+            resp = requests.post(
+                SERPER_URL,
+                headers={"X-API-KEY": SERPER_API_KEY, "Content-Type": "application/json"},
+                json={"q": query, "num": MAX_SOURCES + 4, "hl": "en", "gl": "us"},
+                timeout=10,
+            )
+            if resp.status_code >= 400:
+                self._log(f"[Agent0] Serper 오류 ({resp.status_code}): {resp.text[:200]}")
+                return []
+            organic = resp.json().get("organic", [])
+            results = [{"url": r["link"], "title": r.get("title", "")}
+                       for r in organic if r.get("link")]
+            self._log(f"[Agent0] Serper 결과 {len(results)}건")
+            return results
+        except Exception as e:
+            self._log(f"[Agent0] Serper 오류 (무시하고 계속): {e}")
+            return []
 
     # 교육용 신뢰 도메인
     _SAFE_DOMAINS = (

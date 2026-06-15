@@ -19,6 +19,7 @@ GOOGLE_SHEET_ID = os.getenv("GOOGLE_SHEET_ID", "")
 
 GOOGLE_CSE_API_KEY = os.getenv("GOOGLE_CSE_API_KEY", "")
 GOOGLE_CSE_ID = os.getenv("GOOGLE_CSE_ID", "")
+SERPER_API_KEY = os.getenv("SERPER_API_KEY", "")
 NEWSAPI_KEY = os.getenv("NEWSAPI_KEY", "")
 UNSPLASH_ACCESS_KEY = os.getenv("UNSPLASH_ACCESS_KEY", "VLRkU7wWplDXzMjkBFFqvhVrR_orC10qFcHOApNkrTc")
 
