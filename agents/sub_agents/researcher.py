@@ -82,7 +82,7 @@ class ResearcherAgent:
             self._log("[Agent0] NEWSAPI_KEY 미설정")
             return []
         try:
-            self._log("[Agent0] NewsAPI 검색 중 (Google CSE → NewsAPI로 변경)")
+            self._log("[Agent0] GSE 검색 차단으로 newsapi.org로 변경")
             resp = requests.get(
                 NEWSAPI_URL,
                 params={
