@@ -55,19 +55,18 @@ class ResearcherAgent:
             if url in seen_urls:
                 continue
             doc = self._fetch(url)
-            if doc:
+            if doc and self._is_relevant(doc, query):
                 sources.append(doc)
                 seen_urls.add(url)
                 self._log(f"[Agent0] 출처 수집: {doc.title[:40]}")
+            elif doc:
+                self._log(f"[Agent0] 무관 출처 제외: {doc.title[:40]}")
 
         if not sources:
-            note = (
-                "사용 가능한 출처를 확보하지 못했습니다. "
-                "(NEWSAPI_KEY 미설정이거나 검색 결과 없음, "
-                "또는 기사 링크를 직접 입력해 주세요.)"
-            )
-            self._log(f"[Agent0] 리서치 실패 — {note}")
-            return ResearchResult(success=False, sources=[], note=note)
+            # 관련 출처 없음 — Writer가 자체 지식으로 작성하도록 success=True로 반환
+            note = "관련 뉴스 출처를 찾지 못했습니다. Writer가 자체 지식으로 작성합니다."
+            self._log(f"[Agent0] 관련 출처 없음 — Writer 자체 작성으로 진행")
+            return ResearchResult(success=True, sources=[], note=note)
 
         self._log(f"[Agent0] 리서치 완료 — 출처 {len(sources)}건 확보")
         return ResearchResult(success=True, sources=sources)
@@ -116,14 +115,21 @@ class ResearcherAgent:
             return []
         try:
             self._log("[Agent0] GSE 검색 차단으로 newsapi.org로 변경")
+            # 교육용 뉴스 도메인만 검색 — 성인/부적절 콘텐츠 차단
+            SAFE_DOMAINS = (
+                "bbc.com,reuters.com,apnews.com,nationalgeographic.com,"
+                "smithsonianmag.com,sciencenews.org,newscientist.com,"
+                "theguardian.com,npr.org,time.com,scientificamerican.com"
+            )
             resp = requests.get(
                 NEWSAPI_URL,
                 params={
                     "apiKey": NEWSAPI_KEY,
                     "q": query,
                     "language": "en",
-                    "sortBy": "publishedAt",
+                    "sortBy": "relevancy",
                     "pageSize": MAX_SOURCES + 2,
+                    "domains": SAFE_DOMAINS,
                 },
                 timeout=10,
             )
@@ -137,6 +143,14 @@ class ResearcherAgent:
         except Exception as e:
             self._log(f"[Agent0] 검색 오류 (무시하고 계속): {e}")
             return []
+
+    def _is_relevant(self, doc: SourceDoc, query: str) -> bool:
+        """제목+본문에 검색어 단어가 1개 이상 포함되는지 간단 확인."""
+        keywords = [w.lower() for w in query.split() if len(w) > 2]
+        if not keywords:
+            return True
+        combined = (doc.title + " " + doc.text[:500]).lower()
+        return any(kw in combined for kw in keywords)
 
     def _fetch(self, url: str) -> SourceDoc | None:
         try:

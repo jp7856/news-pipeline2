@@ -120,10 +120,17 @@ Paragraphs: {para_hint}
 
 Instructions:
 1. Use the researched source material above as the primary factual basis.
-   If the source material is irrelevant to the topic, rely on your own knowledge
-   to write accurate, factual content. NEVER refuse to write — always produce
-   valid JSON output regardless of source relevance.
-2. Write an article suitable for the readers' age and comprehension level.
+   If the source material is irrelevant to the topic, IGNORE it entirely and
+   rely on your own knowledge to write accurate, factual content about the topic.
+   NEVER refuse to write — always produce valid JSON output.
+2. CONTENT SAFETY (MANDATORY — violating this is a critical failure):
+   - This newspaper is for children and teens. NEVER include violence, death,
+     murder, gore, nudity, sexual content, war atrocities, graphic accidents,
+     or any adult themes — even if present in source material.
+   - If a source contains such content, discard it and write from your own
+     knowledge. Treat the topic as a general educational subject.
+   - The article must be safe and appropriate for school use at all times.
+3. Write an article suitable for the readers' age and comprehension level.
 3. Include relevant vocabulary naturally in the text.
 4. Add one or two points that spark curiosity or deeper interest.
 5. Include background explanations where needed for younger readers.
