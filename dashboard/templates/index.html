@@ -214,6 +214,7 @@
         <div class="tab" data-tab="workbook">Workbook</div>
         <div class="tab" data-tab="image-v1">이미지 V1</div>
         <div class="tab" data-tab="image-v2">이미지 V2</div>
+        <div class="tab" data-tab="review">검수</div>
       </div>
 
       <div class="panel active" id="panel-article"></div>
@@ -224,6 +225,7 @@
       <div class="panel" id="panel-workbook"></div>
       <div class="panel" id="panel-image-v1"></div>
       <div class="panel" id="panel-image-v2"></div>
+      <div class="panel" id="panel-review"></div>
     </div>
   </main>
 
@@ -522,6 +524,9 @@
       renderImageV1(r);
       renderImageV2(r);
 
+      // 검수 (Agent 5 — 사실·시제 검증)
+      renderReview(r);
+
       // 시트 링크
       const btnSheet = document.getElementById("btn-sheet");
       if (r.sheet_url) {
@@ -535,6 +540,42 @@
     function esc(s) {
       if (!s) return "";
       return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+    }
+
+    // ── 검수 패널 (Agent 5 — 사실·시제 검증) ─────────────────────
+    function renderReview(r) {
+      const rv = r.review;
+      const el = document.getElementById("panel-review");
+      if (!rv) {
+        el.innerHTML = `<h2>검수 (Agent 5)</h2>
+          <p style="color:#64748b;font-size:.85rem">검수 정보가 없습니다.</p>`;
+        return;
+      }
+      const passed = rv.passed && !rv.needs_human_review;
+      const factual = rv.factual_issues || [];
+      const temporal = rv.temporal_issues || [];
+      const statusBox = passed
+        ? `<div style="background:#14532d;border:1px solid #166534;border-radius:10px;padding:12px 16px;margin-bottom:14px">
+             <strong style="color:#4ade80">✓ 검수 통과</strong>
+             <span style="font-size:.8rem;color:#86efac;margin-left:8px">사실·시제 검증 통과 · 재작성 ${rv.rewrite_count || 0}회</span>
+           </div>`
+        : `<div style="background:#7f1d1d;border:1px solid #b91c1c;border-radius:10px;padding:12px 16px;margin-bottom:14px">
+             <strong style="color:#fca5a5">⚠ 검수 미통과 — 편집자 확인 필요</strong>
+             <span style="font-size:.8rem;color:#fecaca;margin-left:8px">재작성 ${rv.rewrite_count || 0}회</span>
+           </div>`;
+      const issueList = (title, arr, color) => arr.length
+        ? `<h2 style="margin-top:14px">${title} <span class="stat fail">${arr.length}</span></h2>
+           <ul style="margin:6px 0 0 18px;font-size:.85rem;line-height:1.7;color:${color}">
+             ${arr.map(i => `<li>${esc(i)}</li>`).join("")}</ul>`
+        : `<h2 style="margin-top:14px">${title} <span class="stat pass">없음</span></h2>`;
+      el.innerHTML = `
+        <h2>검수 (Agent 5 — 사실·시제 검증)</h2>
+        ${statusBox}
+        ${issueList("사실 오류 (Factual)", factual, "#fecaca")}
+        ${issueList("시제·시점 오류 (Temporal)", temporal, "#fecaca")}
+        ${rv.notes ? `<h2 style="margin-top:14px">검수 메모</h2>
+          <p style="font-size:.85rem;line-height:1.7;color:#94a3b8;white-space:pre-wrap">${esc(rv.notes)}</p>` : ""}
+      `;
     }
 
     // ── 초안 체크포인트 배너 ──────────────────────────────────────

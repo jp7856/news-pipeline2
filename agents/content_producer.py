@@ -200,10 +200,15 @@ class ContentProducerAgent:
         final_text: str,
         page: str = "",
         sources: list[str] | None = None,
+        today: str = "",
     ) -> ContentPackage:
         """편집자가 확정한 본문으로 다운스트림을 재생성한다 (P2-2 버전선택 / P2-3 제안적용).
-        리서치·게이트는 건너뛴다(사람이 승인한 텍스트). 어휘·교정·크로스워드·워크북 재생성."""
+        리서치는 건너뛰되, 최종 확정본에 대해 Agent 5 검수(사실·시제)를 재실행한다 (P0-2 ③).
+        어휘·교정·크로스워드·워크북 재생성."""
         from models import ArticleResult
+        from datetime import datetime
+        if not today:
+            today = datetime.now().strftime("%Y-%m-%d")
         page_cfg = get_page_config(level.value, page or None)
         self._log(f"[Rebuild] 확정 본문 기준 재생성 — {page_cfg['page']}")
 
@@ -215,19 +220,27 @@ class ContentProducerAgent:
         self._check_word_count(article, page_cfg)
 
         plagiarism_report = self._plagcheck.run(article)
+        # Agent 5 검수 재실행 — 최종 확정본 기준 사실·시제 검증 (research 없이 본문 내적 검증)
+        review_report = self._reviewer.run(article, None, today)
+        if not review_report.passed:
+            self._log("[Rebuild] ⚠ 최종본 검수 미통과 — 편집자 확인 필요")
+        else:
+            self._log("[Rebuild] 최종본 검수 통과 ✓")
         editing_suggestions = self._editor.run(article, level)
         crossword_sentences = self._crossword.run(article)
         workbook_sets = self._workbook.run(
             article, level, format_key=page_cfg.get("workbook_format")
         )
         self._log("[Rebuild] 재생성 완료")
+        status = ArticleStatus.NEEDS_REVIEW if not review_report.passed else ArticleStatus.APPROVED
         return ContentPackage(
             topic=topic, level=level, section=section, article=article,
             plagiarism_report=plagiarism_report,
+            review_report=review_report,
             editing_suggestions=editing_suggestions,
             crossword_sentences=crossword_sentences,
             workbook_sets=workbook_sets,
-            status=ArticleStatus.APPROVED,
+            status=status,
         )
 
     # ------------------------------------------------------------------
