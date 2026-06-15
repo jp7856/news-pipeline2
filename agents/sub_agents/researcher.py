@@ -81,6 +81,15 @@ class ResearcherAgent:
         "비즈니스": "business", "사람": "people",
     }
 
+    # 교육용 사이트 한정 site: 쿼리
+    _EDU_SITES = (
+        "site:nationalgeographic.com OR site:kids.nationalgeographic.com "
+        "OR site:smithsonianmag.com OR site:sciencenewsforstudents.org "
+        "OR site:bbcearth.com OR site:bbc.co.uk/bitesize "
+        "OR site:dkfindout.com OR site:britannica.com "
+        "OR site:kidshealth.org OR site:amnh.org"
+    )
+
     def _build_query(self, topic: str, section: str) -> str:
         base = topic.strip()
         if self._is_korean(base):
@@ -132,34 +141,48 @@ class ResearcherAgent:
 
     def _search_serper(self, query: str) -> list[dict]:
         try:
-            self._log(f"[Agent0] Serper(Google News) 검색: {query}")
-            # /news 엔드포인트 — 뉴스 기사만 반환
-            resp = requests.post(
-                "https://google.serper.dev/news",
-                headers={"X-API-KEY": SERPER_API_KEY, "Content-Type": "application/json"},
-                json={"q": query, "num": MAX_SOURCES + 6, "hl": "en", "gl": "us"},
-                timeout=10,
-            )
-            if resp.status_code >= 400:
-                self._log(f"[Agent0] Serper 오류 ({resp.status_code}): {resp.text[:200]}")
-                return []
-            news_items = resp.json().get("news", [])
-            results = []
-            for item in news_items:
-                url = item.get("link", "")
-                title = item.get("title", "")
-                if not url:
-                    continue
-                # 쇼핑/SNS 도메인 차단
-                domain = url.split("/")[2].lower().replace("www.", "")
-                if any(b in domain for b in self._BLOCK_DOMAINS):
-                    continue
-                results.append({"url": url, "title": title})
-            self._log(f"[Agent0] Serper News 결과 {len(results)}건")
+            # 1차: 교육 사이트 한정 웹 검색
+            edu_query = f"{query} {self._EDU_SITES}"
+            self._log(f"[Agent0] Serper 교육사이트 검색: {query}")
+            results = self._serper_web(edu_query)
+            self._log(f"[Agent0] 교육사이트 결과 {len(results)}건")
+
+            # 2차: 결과 부족 시 일반 웹 검색 (교육 키워드 추가, 쇼핑 제외)
+            if len(results) < 2:
+                fallback_query = f"{query} explained facts for students"
+                self._log(f"[Agent0] 일반 교육 검색으로 재시도: {fallback_query}")
+                extra = self._serper_web(fallback_query)
+                seen = {r["url"] for r in results}
+                for item in extra:
+                    if item["url"] not in seen:
+                        results.append(item)
+                self._log(f"[Agent0] 재시도 후 총 {len(results)}건")
             return results
         except Exception as e:
             self._log(f"[Agent0] Serper 오류 (무시하고 계속): {e}")
             return []
+
+    def _serper_web(self, query: str) -> list[dict]:
+        resp = requests.post(
+            SERPER_URL,
+            headers={"X-API-KEY": SERPER_API_KEY, "Content-Type": "application/json"},
+            json={"q": query, "num": MAX_SOURCES + 6, "hl": "en", "gl": "us"},
+            timeout=10,
+        )
+        if resp.status_code >= 400:
+            self._log(f"[Agent0] Serper 오류 ({resp.status_code}): {resp.text[:200]}")
+            return []
+        organic = resp.json().get("organic", [])
+        results = []
+        for item in organic:
+            url = item.get("link", "")
+            if not url:
+                continue
+            domain = url.split("/")[2].lower().replace("www.", "")
+            if any(b in domain for b in self._BLOCK_DOMAINS):
+                continue
+            results.append({"url": url, "title": item.get("title", "")})
+        return results
 
     # 교육용 신뢰 도메인
     _SAFE_DOMAINS = (
