@@ -141,6 +141,10 @@
     }
     #btn-ai-revise{background:#7c3aed;color:#fff;padding:9px 18px;font-size:.88rem;font-weight:600}
     #btn-ai-revise:disabled{background:#475569;cursor:not-allowed}
+    .draft-badges{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .draft-badge{background:#334155;color:#cbd5e1;padding:4px 12px;border-radius:999px;font-size:.78rem;font-weight:600}
+    .draft-badge.words{background:#1e3a5f;color:#93c5fd}
+    .draft-badge.cefr{background:#1c3a2c;color:#4ade80}
   </style>
 </head>
 <body>
@@ -225,6 +229,7 @@
         <strong>📋 기사 초안이 완성됐습니다.</strong>
         검토 후 나머지 작업(교정·크로스워드·워크북·번역·이미지·검수·시트저장)을 진행하세요.
       </div>
+      <div class="draft-badges" id="draft-badges"></div>
       <button id="btn-proceed" onclick="proceedWithWork()">이후 작업 진행 ▶</button>
       <button id="btn-draft-cancel" onclick="closeDraftBar()">취소</button>
     </div>
@@ -353,10 +358,19 @@
       }
     }
 
+    let _usagePoller = null;
     function setRunning(running) {
       btnRun.disabled = running;
       badge.textContent = running ? "Running..." : "Ready";
       badge.className = "badge" + (running ? " running" : "");
+      // 실행 중 2초마다 토큰 실시간 갱신
+      if (running && !_usagePoller) {
+        _usagePoller = setInterval(refreshUsage, 2000);
+      } else if (!running && _usagePoller) {
+        clearInterval(_usagePoller);
+        _usagePoller = null;
+        refreshUsage(); // 최종값 한번 더 갱신
+      }
     }
 
     let _lastResult = null;
@@ -520,6 +534,24 @@
     function openDraftBar() {
       document.getElementById("draft-bar").classList.add("open");
       document.getElementById("revise-input").value = "";
+      // 배지: word count + level/CEFR
+      const r = _lastResult;
+      if (r) {
+        const lv = r.level;
+        const pageVal = document.getElementById("page").value;
+        const pageList = PAGES[lv] || [];
+        const pageCfg = pageList.find(p => p.page === pageVal) || pageList[0];
+        // label 예: "2면 · L2/B2 · 270-280w" → L2 · CEFR B2 파싱
+        let cefrBadge = "";
+        if (pageCfg) {
+          const m = pageCfg.label.match(/·\s*([^·]+?)\s*·/);
+          if (m) cefrBadge = m[1].trim();
+        }
+        const words = r.article.word_count || 0;
+        document.getElementById("draft-badges").innerHTML =
+          `<span class="draft-badge words">${words} words</span>` +
+          (cefrBadge ? `<span class="draft-badge cefr">${esc(cefrBadge)}</span>` : "");
+      }
     }
     function closeDraftBar() {
       document.getElementById("draft-bar").classList.remove("open");
