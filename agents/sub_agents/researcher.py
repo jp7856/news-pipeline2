@@ -122,22 +122,40 @@ class ResearcherAgent:
             self._log("[Agent0] SERPER_API_KEY 미설정 — NewsAPI 사용")
         return self._search_newsapi(query)
 
+    # 쇼핑/광고 도메인 차단 목록
+    _BLOCK_DOMAINS = {
+        "amazon", "ebay", "etsy", "walmart", "target", "shop", "store",
+        "aliexpress", "alibaba", "shopping", "pinterest", "instagram",
+        "tiktok", "youtube", "reddit", "quora", "facebook", "twitter",
+        "yelp", "tripadvisor",
+    }
+
     def _search_serper(self, query: str) -> list[dict]:
         try:
-            self._log(f"[Agent0] Serper(Google) 검색: {query}")
+            self._log(f"[Agent0] Serper(Google News) 검색: {query}")
+            # /news 엔드포인트 — 뉴스 기사만 반환
             resp = requests.post(
-                SERPER_URL,
+                "https://google.serper.dev/news",
                 headers={"X-API-KEY": SERPER_API_KEY, "Content-Type": "application/json"},
-                json={"q": query, "num": MAX_SOURCES + 4, "hl": "en", "gl": "us"},
+                json={"q": query, "num": MAX_SOURCES + 6, "hl": "en", "gl": "us"},
                 timeout=10,
             )
             if resp.status_code >= 400:
                 self._log(f"[Agent0] Serper 오류 ({resp.status_code}): {resp.text[:200]}")
                 return []
-            organic = resp.json().get("organic", [])
-            results = [{"url": r["link"], "title": r.get("title", "")}
-                       for r in organic if r.get("link")]
-            self._log(f"[Agent0] Serper 결과 {len(results)}건")
+            news_items = resp.json().get("news", [])
+            results = []
+            for item in news_items:
+                url = item.get("link", "")
+                title = item.get("title", "")
+                if not url:
+                    continue
+                # 쇼핑/SNS 도메인 차단
+                domain = url.split("/")[2].lower().replace("www.", "")
+                if any(b in domain for b in self._BLOCK_DOMAINS):
+                    continue
+                results.append({"url": url, "title": title})
+            self._log(f"[Agent0] Serper News 결과 {len(results)}건")
             return results
         except Exception as e:
             self._log(f"[Agent0] Serper 오류 (무시하고 계속): {e}")
