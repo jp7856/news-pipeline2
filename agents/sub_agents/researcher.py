@@ -82,9 +82,17 @@ class ResearcherAgent:
     def _search(self, query: str) -> list[str]:
         try:
             self._log("[Agent0] DuckDuckGo 검색 중 (Google CSE → DDG로 변경)")
+            urls: list[str] = []
             with DDGS() as ddgs:
-                results = list(ddgs.text(query, max_results=MAX_SOURCES + 2, region="wt-wt"))
-            return [r.get("href", "") for r in results if r.get("href")]
+                # 뉴스 검색 우선 시도
+                news = list(ddgs.news(query, max_results=MAX_SOURCES + 4))
+                urls = [r.get("url", "") for r in news if r.get("url")]
+                # 뉴스 결과 없으면 일반 텍스트 검색 폴백
+                if not urls:
+                    text = list(ddgs.text(query, max_results=MAX_SOURCES + 4, region="wt-wt"))
+                    urls = [r.get("href", "") for r in text if r.get("href")]
+            self._log(f"[Agent0] 검색 결과 {len(urls)}건 수신")
+            return urls
         except Exception as e:
             self._log(f"[Agent0] 검색 오류 (무시하고 계속): {e}")
             return []
