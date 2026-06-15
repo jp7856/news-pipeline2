@@ -193,7 +193,6 @@
           <strong>📋 기사 초안이 완성됐습니다.</strong>
           검토 후 나머지 작업(교정·크로스워드·워크북·번역·이미지·검수·시트저장)을 진행하세요.
         </div>
-        <div class="draft-badges" id="draft-badges"></div>
         <button id="btn-proceed" onclick="proceedWithWork()">이후 작업 진행 ▶</button>
         <button id="btn-draft-cancel" onclick="closeDraftBar()">취소</button>
       </div>
@@ -405,7 +404,13 @@
            ${rs.sources.map(s => `<a class="source-link" href="${esc(s.url)}" target="_blank">${esc(s.title || s.url)}</a>`).join("")}`
         : "";
 
-      // Article
+      // Article — 지면 CEFR 배지 계산
+      const _pageVal = document.getElementById("page").value;
+      const _pageList = PAGES[r.level] || [];
+      const _pageCfg = _pageList.find(p => p.page === _pageVal) || _pageList[0];
+      let _cefrBadge = "";
+      if (_pageCfg) { const m = _pageCfg.label.match(/·\s*([^·]+?)\s*·/); if (m) _cefrBadge = m[1].trim(); }
+
       document.getElementById("panel-article").innerHTML = `
         ${banner}
         <h2>Article</h2>
@@ -413,6 +418,7 @@
           <span class="stat">${r.level.toUpperCase()}</span>
           <span class="stat">${r.section}</span>
           <span class="stat">${r.article.word_count} words</span>
+          ${_cefrBadge ? `<span class="stat" style="background:#1c3a2c;color:#4ade80">${esc(_cefrBadge)}</span>` : ""}
         </div>
         ${(r.alternate_text) ? `
         <div style="display:flex;gap:8px;margin-bottom:10px">
@@ -425,7 +431,6 @@
           onfocus="this.style.borderColor='#3b82f6'"
           onblur="this.style.borderColor='transparent';if(_lastResult)_lastResult.article.text=this.innerText.trim()"
         >${esc(r.article.text || "(생성 보류됨)")}</div>
-        <div id="article-badges" style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap"></div>
         <h2 style="margin-top:20px">Vocabulary ${(r.article.vocabulary_detail && r.article.vocabulary_detail.length) ? `<span class="stat">${r.article.vocabulary_detail.length} words</span>` : ""}</h2>
         ${(r.article.vocabulary_detail && r.article.vocabulary_detail.length)
           ? `<div>${r.article.vocabulary_detail.map(v => `<span class="vocab-tag">${esc(v.word)} <span style="color:#64748b">${esc(v.cefr)}</span> · ${esc(v.meaning_ko)}</span>`).join("")}</div>`
@@ -536,29 +541,6 @@
     function openDraftBar() {
       document.getElementById("draft-bar").classList.add("open");
       document.getElementById("revise-input").value = "";
-      // 배지: word count + level/CEFR → article 패널 아래에 표시
-      const r = _lastResult;
-      if (r) {
-        const lv = r.level;
-        const pageVal = document.getElementById("page").value;
-        const pageList = PAGES[lv] || [];
-        const pageCfg = pageList.find(p => p.page === pageVal) || pageList[0];
-        let cefrBadge = "";
-        if (pageCfg) {
-          const m = pageCfg.label.match(/·\s*([^·]+?)\s*·/);
-          if (m) cefrBadge = m[1].trim();
-        }
-        const words = r.article.word_count || 0;
-        const badgeHtml =
-          `<span class="draft-badge words">${words} words</span>` +
-          (cefrBadge ? `<span class="draft-badge cefr">${esc(cefrBadge)}</span>` : "");
-        // article 패널 배지
-        const ab = document.getElementById("article-badges");
-        if (ab) ab.innerHTML = badgeHtml;
-        // 드래프트 배너 배지
-        const db = document.getElementById("draft-badges");
-        if (db) db.innerHTML = badgeHtml;
-      }
     }
     function closeDraftBar() {
       document.getElementById("draft-bar").classList.remove("open");
