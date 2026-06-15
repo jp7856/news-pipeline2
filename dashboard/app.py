@@ -132,6 +132,49 @@ def api_regenerate():
     return jsonify({"message": "Rebuild started"})
 
 
+@app.route("/api/revise", methods=["POST"])
+def api_revise():
+    """AI 수정 — 기사 본문 + 수정 지시를 받아 Claude로 수정된 본문을 반환."""
+    data = request.json
+    article_text = (data.get("article_text") or "").strip()
+    instruction = (data.get("instruction") or "").strip()
+    level_str = data.get("level", "junior")
+
+    if not article_text:
+        return jsonify({"error": "article_text is required."}), 400
+    if not instruction:
+        return jsonify({"error": "instruction is required."}), 400
+
+    try:
+        level = Level(level_str)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+    try:
+        from config import ANTHROPIC_API_KEY, CLAUDE_MODEL, LEVEL_CONFIG
+        from agents.token_meter import make_client
+        cfg = LEVEL_CONFIG.get(level.value, {})
+        client = make_client(ANTHROPIC_API_KEY)
+        msg = client.messages.create(
+            model=CLAUDE_MODEL,
+            max_tokens=2000,
+            messages=[{
+                "role": "user",
+                "content": (
+                    f"Revise this educational article for {cfg.get('newspaper','')}"
+                    f" according to the instruction.\n\n"
+                    f"Article:\n{article_text}\n\n"
+                    f"Instruction: {instruction}\n\n"
+                    "Return ONLY the revised article text. No explanation, no JSON."
+                ),
+            }],
+        )
+        revised = msg.content[0].text.strip()
+        return jsonify({"revised_text": revised})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/usage")
 def api_usage():
     """누적 토큰 사용량·비용 (서버 기동 이후)."""
@@ -174,22 +217,13 @@ def _run_pipeline(sid: str, topic: str, level: Level, section: Section, source_u
             socketio.emit("log", {"message": msg}, to=sid)
 
         orchestrator = Orchestrator(log_callback=emit_log)
-        pkg, sheet_url = orchestrator.run(topic, level, section, source_url=source_url, page=page)
-        result = _serialize(pkg, sheet_url)
+        # Phase 1만 실행 — 기사 초안 작성 후 사용자가 확인
+        pkg = orchestrator.run_phase1(topic, level, section, source_url=source_url, page=page)
+        result = _serialize(pkg, "")
 
-        # 히스토리에 저장
-        entry = {
-            "idx": len(_history),
-            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
-            "topic": topic,
-            "level": level.value,
-            "section": section.value,
-            "result": result,
-        }
-        _history.append(entry)
-
-        # 요청한 사람에게만 결과 전송
-        socketio.emit("pipeline_done", {"result": result}, to=sid)
+        # 초안 완료 이벤트 (draft_done) — 이후 작업은 사용자가 [이후 작업 진행] 클릭 후 진행
+        from agents.token_meter import meter
+        socketio.emit("draft_done", {"result": result, "usage": meter.snapshot()}, to=sid)
     except Exception as e:
         socketio.emit("log", {"message": f"FATAL ERROR: {e}"}, to=sid)
         socketio.emit("pipeline_error", {"error": str(e)}, to=sid)

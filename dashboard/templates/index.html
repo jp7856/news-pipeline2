@@ -120,6 +120,27 @@
     .sg-reject.on{background:#b91c1c;color:#fff}
 
     .hidden{display:none}
+
+    /* 초안 확인 체크포인트 배너 */
+    #draft-bar{
+      position:fixed;bottom:0;left:0;right:0;
+      background:#1e293b;border-top:2px solid #3b82f6;
+      padding:12px 20px;z-index:800;
+      display:none;flex-direction:column;gap:8px;
+    }
+    #draft-bar.open{display:flex}
+    .draft-bar-top{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+    .draft-bar-msg{flex:1;font-size:.88rem;color:#cbd5e1}
+    .draft-bar-msg strong{color:#93c5fd}
+    #btn-proceed{background:#16a34a;color:#fff;padding:9px 18px;font-size:.88rem;font-weight:600}
+    #btn-draft-cancel{background:#334155;color:#94a3b8;padding:9px 14px;font-size:.88rem}
+    .draft-bar-bottom{display:flex;gap:8px}
+    #revise-input{
+      flex:1;padding:9px 14px;border:1px solid #334155;border-radius:8px;
+      background:#0f172a;color:#e2e8f0;font-size:.88rem;
+    }
+    #btn-ai-revise{background:#7c3aed;color:#fff;padding:9px 18px;font-size:.88rem;font-weight:600}
+    #btn-ai-revise:disabled{background:#475569;cursor:not-allowed}
   </style>
 </head>
 <body>
@@ -197,6 +218,23 @@
     </div>
   </div>
 
+  <!-- 초안 확인 체크포인트 배너 -->
+  <div id="draft-bar">
+    <div class="draft-bar-top">
+      <div class="draft-bar-msg">
+        <strong>📋 기사 초안이 완성됐습니다.</strong>
+        검토 후 나머지 작업(교정·크로스워드·워크북·번역·이미지·검수·시트저장)을 진행하세요.
+      </div>
+      <button id="btn-proceed" onclick="proceedWithWork()">이후 작업 진행 ▶</button>
+      <button id="btn-draft-cancel" onclick="closeDraftBar()">취소</button>
+    </div>
+    <div class="draft-bar-bottom">
+      <input id="revise-input" type="text"
+        placeholder="수정 지시 또는 질문 — 예: 두 번째 문단 더 쉽게 / 표절 경고 왜 떴어?">
+      <button id="btn-ai-revise" onclick="reviseArticle()">AI 수정</button>
+    </div>
+  </div>
+
   <!-- Lightbox -->
   <div id="lightbox" onclick="closeLightbox()">
     <span id="lightbox-close">&times;</span>
@@ -254,16 +292,29 @@
       logBox.scrollTop = logBox.scrollHeight;
     });
 
+    // Phase 1 완료 — 초안 표시 + 체크포인트 배너
+    socket.on("draft_done", ({result, usage}) => {
+      _clientRunning = false;
+      setRunning(false);
+      renderResult(result);
+      renderUsage(usage);
+      openDraftBar();
+      // 배너 높이만큼 하단 여백 확보
+      document.querySelector("main").style.paddingBottom = "110px";
+    });
+
     socket.on("pipeline_done", ({result, usage}) => {
       _clientRunning = false;
       setRunning(false);
       renderResult(result);
       renderUsage(usage);
+      closeDraftBar();
     });
 
     socket.on("pipeline_error", ({error}) => {
       _clientRunning = false;
       setRunning(false);
+      closeDraftBar();
       alert("Error: " + error);
     });
 
@@ -463,6 +514,60 @@
     function esc(s) {
       if (!s) return "";
       return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+    }
+
+    // ── 초안 체크포인트 배너 ──────────────────────────────────────
+    function openDraftBar() {
+      document.getElementById("draft-bar").classList.add("open");
+      document.getElementById("revise-input").value = "";
+    }
+    function closeDraftBar() {
+      document.getElementById("draft-bar").classList.remove("open");
+      document.querySelector("main").style.paddingBottom = "";
+    }
+
+    // 이후 작업 진행 — 현재 표시된 기사로 Phase 2 실행
+    function proceedWithWork() {
+      if (!_lastResult) return;
+      const body = document.getElementById("article-body");
+      const currentText = body ? body.textContent.trim() : _lastResult.article.text;
+      closeDraftBar();
+      regenerate(currentText);
+    }
+
+    // AI 수정 — 지시 입력 → Claude 수정 → 초안 업데이트
+    async function reviseArticle() {
+      if (!_lastResult) return;
+      const instruction = document.getElementById("revise-input").value.trim();
+      if (!instruction) { alert("수정 지시를 입력하세요."); return; }
+      const body = document.getElementById("article-body");
+      const currentText = body ? body.textContent.trim() : _lastResult.article.text;
+      const btn = document.getElementById("btn-ai-revise");
+      btn.disabled = true;
+      btn.textContent = "수정 중...";
+      try {
+        const resp = await fetch("/api/revise", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({
+            article_text: currentText,
+            instruction,
+            level: _lastResult.level,
+          }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) { alert("오류: " + data.error); return; }
+        // 수정된 본문으로 화면 업데이트 (탭 내 article-body만 교체)
+        if (body) body.textContent = data.revised_text;
+        // _lastResult에도 반영해 이후 진행 시 최신 본문 사용
+        _lastResult.article.text = data.revised_text;
+        document.getElementById("revise-input").value = "";
+      } catch (e) {
+        alert("수정 실패: " + e.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "AI 수정";
+      }
     }
 
     // ── P2-2: 버전 토글/선택 ──────────────────────────────────────

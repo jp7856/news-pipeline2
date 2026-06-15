@@ -105,6 +105,37 @@ class Orchestrator:
 
         return package, self._sheet_url
 
+    def run_phase1(
+        self,
+        topic: str,
+        level: Level,
+        section: Section,
+        source_url: str = "",
+        page: str = "",
+        today: str = "",
+    ) -> ContentPackage:
+        """Phase 1만 실행: 리서치 + 기사 작성 + 표절/검수.
+        번역·이미지·시트 저장은 포함하지 않는다.
+        사용자가 초안을 확인한 후 rebuild_and_run으로 이어진다."""
+        run_id = str(uuid.uuid4())[:8]
+        start = datetime.now()
+        if not today:
+            today = start.strftime("%Y-%m-%d")
+        self._log(f"=== Phase 1 Start (run_id: {run_id}) ===")
+        self._log(f"    Topic   : {topic}")
+        self._log(f"    Level   : {level.value}")
+        self._log(f"    Section : {section.value}")
+        self._log(f"    Today   : {today}")
+        self._log("")
+        producer = ContentProducerAgent(log_callback=self._log)
+        package = producer.run(topic, level, section, source_url=source_url, today=today, page=page)
+        duration = (datetime.now() - start).seconds
+        self._log("")
+        self._log(f"=== Phase 1 Complete ({duration}s) ===")
+        self._log("    초안을 확인한 뒤 [이후 작업 진행]을 클릭하세요.")
+        self._log("    (번역·이미지·시트 저장은 확인 후 진행됩니다)")
+        return package
+
     def rebuild_and_run(
         self,
         topic: str,
