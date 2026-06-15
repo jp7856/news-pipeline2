@@ -16,7 +16,8 @@ from typing import Callable
 import requests
 from bs4 import BeautifulSoup
 
-from config import NEWSAPI_KEY
+from config import NEWSAPI_KEY, ANTHROPIC_API_KEY, CLAUDE_MODEL
+from agents.token_meter import make_client
 from models import ResearchResult, SourceDoc
 
 logger = logging.getLogger(__name__)
@@ -75,7 +76,30 @@ class ResearcherAgent:
 
     def _build_query(self, topic: str, section: str) -> str:
         base = topic.strip()
+        if self._is_korean(base):
+            base = self._translate_to_english(base)
         return f"{base} {section}".strip()
+
+    def _is_korean(self, text: str) -> bool:
+        return any("가" <= c <= "힣" for c in text)
+
+    def _translate_to_english(self, text: str) -> str:
+        try:
+            client = make_client(ANTHROPIC_API_KEY)
+            msg = client.messages.create(
+                model=CLAUDE_MODEL,
+                max_tokens=60,
+                messages=[{
+                    "role": "user",
+                    "content": f"Translate this Korean word/phrase to English for a news search query. Reply with only the English translation, no explanation:\n{text}"
+                }]
+            )
+            translated = msg.content[0].text.strip()
+            self._log(f"[Agent0] 검색어 번역: {text} → {translated}")
+            return translated
+        except Exception as e:
+            self._log(f"[Agent0] 번역 실패, 원문 사용: {e}")
+            return text
 
     def _search(self, query: str) -> list[str]:
         if not NEWSAPI_KEY:
