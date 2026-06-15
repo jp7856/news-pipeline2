@@ -13,7 +13,8 @@
     header{background:#1e293b;padding:14px 24px;display:flex;align-items:center;gap:12px;border-bottom:1px solid #334155}
     header h1{font-size:1.15rem;font-weight:600}
     .badge{background:#334155;padding:4px 10px;border-radius:999px;font-size:.75rem}
-    .badge.running{background:#16a34a;animation:pulse 1.5s infinite}
+    .badge.running{background:#16a34a;animation:pulse 1.5s infinite;cursor:pointer}
+    .badge.running.stop-hover{background:#b91c1c;animation:none}
     @keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
     main{padding:20px;max-width:1300px;margin:0 auto}
 
@@ -321,6 +322,17 @@
       alert("Error: " + error);
     });
 
+    socket.on("pipeline_stopped", () => {
+      _clientRunning = false;
+      setRunning(false);
+      closeDraftBar();
+      const p = document.createElement("p");
+      p.style.color = "#f87171";
+      p.textContent = "■ 사용자가 작업을 중단했습니다.";
+      logBox.appendChild(p);
+      logBox.scrollTop = logBox.scrollHeight;
+    });
+
     let _clientRunning = false;
 
     async function runPipeline() {
@@ -370,6 +382,28 @@
         refreshUsage(); // 최종값 한번 더 갱신
       }
     }
+
+    // ── 러닝 배지 hover/클릭 → 중단 ───────────────────────────────
+    badge.addEventListener("mouseenter", () => {
+      if (!_clientRunning) return;
+      badge.classList.add("stop-hover");
+      badge.textContent = "Running... — 클릭하여 중단";
+    });
+    badge.addEventListener("mouseleave", () => {
+      badge.classList.remove("stop-hover");
+      if (_clientRunning) badge.textContent = "Running...";
+    });
+    badge.addEventListener("click", async () => {
+      if (!_clientRunning) return;
+      badge.textContent = "중단 중...";
+      try {
+        await fetch("/api/stop", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({ sid: _mySid }),
+        });
+      } catch (e) {}
+    });
 
     let _lastResult = null;
 

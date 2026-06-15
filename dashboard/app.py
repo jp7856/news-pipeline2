@@ -31,8 +31,24 @@ logger = logging.getLogger(__name__)
 # sid → 현재 실행 중 여부
 _running: dict[str, bool] = {}
 
+# sid → 중단 요청 플래그 (협조적 취소)
+_cancel: dict[str, bool] = {}
+
 # 전체 히스토리 (모두 보기용)
 _history: list[dict] = []
+
+
+class PipelineCancelled(Exception):
+    """사용자가 실행 중 파이프라인을 중단했을 때 발생."""
+
+
+def _make_emit_log(sid: str):
+    """로그 콜백 생성 — 호출 시점마다 중단 요청을 확인해 협조적으로 취소한다."""
+    def emit_log(msg: str):
+        if _cancel.get(sid):
+            raise PipelineCancelled()
+        socketio.emit("log", {"message": msg}, to=sid)
+    return emit_log
 
 
 @app.route("/")
@@ -82,6 +98,17 @@ def api_run():
     return jsonify({"message": "Pipeline started"})
 
 
+@app.route("/api/stop", methods=["POST"])
+def api_stop():
+    """실행 중 파이프라인 중단 요청 — 다음 로그 시점에 협조적으로 취소된다."""
+    data = request.json or {}
+    sid = data.get("sid", "")
+    if _running.get(sid):
+        _cancel[sid] = True
+        return jsonify({"message": "stopping"})
+    return jsonify({"message": "not running"})
+
+
 @app.route("/api/regenerate", methods=["POST"])
 def api_regenerate():
     """확정 본문(버전 선택 P2-2 / 편집 반영 P2-3)으로 다운스트림 재생성."""
@@ -108,9 +135,7 @@ def api_regenerate():
 
     def _job():
         try:
-            def emit_log(msg: str):
-                socketio.emit("log", {"message": msg}, to=sid)
-            orchestrator = Orchestrator(log_callback=emit_log)
+            orchestrator = Orchestrator(log_callback=_make_emit_log(sid))
             pkg, sheet_url = orchestrator.rebuild_and_run(
                 topic, level, section, final_text, page=page, sources=sources
             )
@@ -123,10 +148,13 @@ def api_regenerate():
             })
             from agents.token_meter import meter
             socketio.emit("pipeline_done", {"result": result, "usage": meter.snapshot()}, to=sid)
+        except PipelineCancelled:
+            socketio.emit("pipeline_stopped", {}, to=sid)
         except Exception as e:
             socketio.emit("pipeline_error", {"error": str(e)}, to=sid)
         finally:
             _running.pop(sid, None)
+            _cancel.pop(sid, None)
 
     threading.Thread(target=_job, daemon=True).start()
     return jsonify({"message": "Rebuild started"})
@@ -225,10 +253,7 @@ def api_history_item(idx):
 
 def _run_pipeline(sid: str, topic: str, level: Level, section: Section, source_url: str = "", page: str = ""):
     try:
-        def emit_log(msg: str):
-            socketio.emit("log", {"message": msg}, to=sid)
-
-        orchestrator = Orchestrator(log_callback=emit_log)
+        orchestrator = Orchestrator(log_callback=_make_emit_log(sid))
         # Phase 1만 실행 — 기사 초안 작성 후 사용자가 확인
         pkg = orchestrator.run_phase1(topic, level, section, source_url=source_url, page=page)
         result = _serialize(pkg, "")
@@ -236,11 +261,14 @@ def _run_pipeline(sid: str, topic: str, level: Level, section: Section, source_u
         # 초안 완료 이벤트 (draft_done) — 이후 작업은 사용자가 [이후 작업 진행] 클릭 후 진행
         from agents.token_meter import meter
         socketio.emit("draft_done", {"result": result, "usage": meter.snapshot()}, to=sid)
+    except PipelineCancelled:
+        socketio.emit("pipeline_stopped", {}, to=sid)
     except Exception as e:
         socketio.emit("log", {"message": f"FATAL ERROR: {e}"}, to=sid)
         socketio.emit("pipeline_error", {"error": str(e)}, to=sid)
     finally:
         _running.pop(sid, None)
+        _cancel.pop(sid, None)
 
 
 def _serialize(pkg: ContentPackage, sheet_url: str = "") -> dict:
