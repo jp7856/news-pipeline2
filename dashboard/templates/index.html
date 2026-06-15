@@ -420,7 +420,11 @@
           <button class="ver-btn" id="ver-alt" onclick="showVersion('alt')">${esc(r.alternate_label || "대안")}</button>
           <button style="margin-left:auto;background:#16a34a;color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:.8rem;cursor:pointer" onclick="selectAlternate()">이 버전으로 저장·재생성</button>
         </div>` : ""}
-        <div class="article-text" id="article-body">${esc(r.article.text || "(생성 보류됨)")}</div>
+        <div class="article-text" id="article-body" contenteditable="true" spellcheck="false"
+          style="outline:none;border:1px solid transparent;border-radius:6px;transition:border-color .2s"
+          onfocus="this.style.borderColor='#3b82f6'"
+          onblur="this.style.borderColor='transparent';if(_lastResult)_lastResult.article.text=this.innerText.trim()"
+        >${esc(r.article.text || "(생성 보류됨)")}</div>
         <div id="article-badges" style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap"></div>
         <h2 style="margin-top:20px">Vocabulary ${(r.article.vocabulary_detail && r.article.vocabulary_detail.length) ? `<span class="stat">${r.article.vocabulary_detail.length} words</span>` : ""}</h2>
         ${(r.article.vocabulary_detail && r.article.vocabulary_detail.length)
