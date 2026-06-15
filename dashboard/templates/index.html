@@ -123,9 +123,8 @@
 
     /* 초안 확인 체크포인트 배너 */
     #draft-bar{
-      position:fixed;bottom:0;left:0;right:0;
-      background:#1e293b;border-top:2px solid #3b82f6;
-      padding:12px 20px;z-index:800;
+      background:#1e293b;border:1px solid #3b82f6;border-radius:10px;
+      padding:12px 20px;margin-top:10px;
       display:none;flex-direction:column;gap:8px;
     }
     #draft-bar.open{display:flex}
@@ -187,6 +186,24 @@
     <!-- Log -->
     <div id="log-box" class="hidden"></div>
 
+    <!-- 초안 확인 체크포인트 배너 (로그 바로 아래) -->
+    <div id="draft-bar">
+      <div class="draft-bar-top">
+        <div class="draft-bar-msg">
+          <strong>📋 기사 초안이 완성됐습니다.</strong>
+          검토 후 나머지 작업(교정·크로스워드·워크북·번역·이미지·검수·시트저장)을 진행하세요.
+        </div>
+        <div class="draft-badges" id="draft-badges"></div>
+        <button id="btn-proceed" onclick="proceedWithWork()">이후 작업 진행 ▶</button>
+        <button id="btn-draft-cancel" onclick="closeDraftBar()">취소</button>
+      </div>
+      <div class="draft-bar-bottom">
+        <input id="revise-input" type="text"
+          placeholder="수정 지시 또는 질문 — 예: 두 번째 문단 더 쉽게 / 표절 경고 왜 떴어?">
+        <button id="btn-ai-revise" onclick="reviseArticle()">AI 수정</button>
+      </div>
+    </div>
+
     <!-- Result area -->
     <div id="result-area" class="hidden">
       <div class="tabs">
@@ -219,24 +236,6 @@
         <button class="history-close" onclick="closeHistory()">&times;</button>
       </div>
       <div class="history-list" id="history-list"></div>
-    </div>
-  </div>
-
-  <!-- 초안 확인 체크포인트 배너 -->
-  <div id="draft-bar">
-    <div class="draft-bar-top">
-      <div class="draft-bar-msg">
-        <strong>📋 기사 초안이 완성됐습니다.</strong>
-        검토 후 나머지 작업(교정·크로스워드·워크북·번역·이미지·검수·시트저장)을 진행하세요.
-      </div>
-      <div class="draft-badges" id="draft-badges"></div>
-      <button id="btn-proceed" onclick="proceedWithWork()">이후 작업 진행 ▶</button>
-      <button id="btn-draft-cancel" onclick="closeDraftBar()">취소</button>
-    </div>
-    <div class="draft-bar-bottom">
-      <input id="revise-input" type="text"
-        placeholder="수정 지시 또는 질문 — 예: 두 번째 문단 더 쉽게 / 표절 경고 왜 떴어?">
-      <button id="btn-ai-revise" onclick="reviseArticle()">AI 수정</button>
     </div>
   </div>
 
@@ -304,8 +303,6 @@
       renderResult(result);
       renderUsage(usage);
       openDraftBar();
-      // 배너 높이만큼 하단 여백 확보
-      document.querySelector("main").style.paddingBottom = "110px";
     });
 
     socket.on("pipeline_done", ({result, usage}) => {
