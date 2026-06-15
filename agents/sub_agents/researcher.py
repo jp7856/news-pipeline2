@@ -1,12 +1,11 @@
 """ResearcherAgent (Agent 0, P0-1) — 기사 작성 전 실시간 리서치.
 
-흐름: 뉴스 검색 → 상위 2~4건 본문 수집 → Writer 컨텍스트로 주입.
-출처는 실제 fetch한 기사 URL만 기록한다.
+흐름: NewsAPI 검색 → 제목 관련성 필터 → 상위 2~4건 본문 수집 → Writer 컨텍스트 주입.
+관련 출처 미확보 시 Writer가 자체 지식으로 작성한다.
 
 [변경 이력]
-- 최초: Google Custom Search Engine (CSE) 사용
-- 임시 변경: Google CSE 403 차단으로 NewsAPI.org로 교체
-- 복귀: Google CSE 키 교체 후 정상화 — CSE 우선, 실패 시 NewsAPI 폴백
+- 최초: Google Custom Search Engine (CSE) 시도 → API 접근권 문제(403)로 미동작
+- 현재: NewsAPI.org 사용. 교육 도메인 우선, 부족하면 전체 도메인 재시도.
 """
 
 import logging
@@ -15,13 +14,12 @@ from typing import Callable
 import requests
 from bs4 import BeautifulSoup
 
-from config import GOOGLE_CSE_API_KEY, GOOGLE_CSE_ID, NEWSAPI_KEY, ANTHROPIC_API_KEY, CLAUDE_MODEL
+from config import NEWSAPI_KEY, ANTHROPIC_API_KEY, CLAUDE_MODEL
 from agents.token_meter import make_client
 from models import ResearchResult, SourceDoc
 
 logger = logging.getLogger(__name__)
 
-CSE_URL = "https://www.googleapis.com/customsearch/v1"
 NEWSAPI_URL = "https://newsapi.org/v2/everything"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
@@ -112,45 +110,9 @@ class ResearcherAgent:
             return text
 
     def _search(self, query: str) -> list[dict]:
-        """CSE 우선 검색. 실패하거나 키 미설정 시 NewsAPI 폴백."""
-        # ── Google CSE ──────────────────────────────────────────────
-        if GOOGLE_CSE_API_KEY and GOOGLE_CSE_ID:
-            results = self._search_cse(query)
-            if results:
-                return results
-            self._log("[Agent0] CSE 결과 없음 — NewsAPI 폴백")
-        else:
-            self._log("[Agent0] CSE 키 미설정 — NewsAPI 사용")
-
-        # ── NewsAPI 폴백 ─────────────────────────────────────────────
         return self._search_newsapi(query)
 
-    def _search_cse(self, query: str) -> list[dict]:
-        try:
-            self._log(f"[Agent0] Google CSE 검색: {query}")
-            resp = requests.get(
-                CSE_URL,
-                params={
-                    "key": GOOGLE_CSE_API_KEY,
-                    "cx": GOOGLE_CSE_ID,
-                    "q": query,
-                    "num": MAX_SOURCES + 2,
-                },
-                timeout=10,
-            )
-            if resp.status_code >= 400:
-                self._log(f"[Agent0] CSE 오류 ({resp.status_code}): {resp.text[:200]}")
-                return []
-            items = resp.json().get("items", [])
-            results = [{"url": it["link"], "title": it.get("title", "")}
-                       for it in items if it.get("link")]
-            self._log(f"[Agent0] CSE 결과 {len(results)}건")
-            return results
-        except Exception as e:
-            self._log(f"[Agent0] CSE 오류 (무시하고 계속): {e}")
-            return []
-
-    # 교육용 신뢰 도메인 (NewsAPI 폴백 시 우선 적용)
+    # 교육용 신뢰 도메인
     _SAFE_DOMAINS = (
         "bbc.com,reuters.com,apnews.com,nationalgeographic.com,"
         "smithsonianmag.com,sciencenews.org,newscientist.com,"
