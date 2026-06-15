@@ -1,13 +1,12 @@
 """ResearcherAgent (Agent 0, P0-1) — 기사 작성 전 실시간 리서치.
 
 흐름: 뉴스 검색 → 상위 2~4건 본문 수집 → Writer 컨텍스트로 주입.
-출처는 실제 fetch한 기사 URL만 기록한다. 출처 미확보 시 success=False로
-반환하여 파이프라인이 생성을 중단하도록 한다.
+출처는 실제 fetch한 기사 URL만 기록한다.
 
 [변경 이력]
 - 최초: Google Custom Search Engine (CSE) 사용
-- 변경: Google CSE API가 Google 계정 수준에서 지속 차단(403)되어
-  NewsAPI.org로 교체. 동일한 실시간 뉴스 검색 기능 제공.
+- 임시 변경: Google CSE 403 차단으로 NewsAPI.org로 교체
+- 복귀: Google CSE 키 교체 후 정상화 — CSE 우선, 실패 시 NewsAPI 폴백
 """
 
 import logging
@@ -16,12 +15,13 @@ from typing import Callable
 import requests
 from bs4 import BeautifulSoup
 
-from config import NEWSAPI_KEY, ANTHROPIC_API_KEY, CLAUDE_MODEL
+from config import GOOGLE_CSE_API_KEY, GOOGLE_CSE_ID, NEWSAPI_KEY, ANTHROPIC_API_KEY, CLAUDE_MODEL
 from agents.token_meter import make_client
 from models import ResearchResult, SourceDoc
 
 logger = logging.getLogger(__name__)
 
+CSE_URL = "https://www.googleapis.com/customsearch/v1"
 NEWSAPI_URL = "https://newsapi.org/v2/everything"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
@@ -47,7 +47,7 @@ class ResearcherAgent:
                 seen_urls.add(source_url)
                 self._log(f"[Agent0] 제공 링크 수집: {doc.title[:40]}")
 
-        # 2) NewsAPI로 추가 출처 수집 (제목 필터 통과 기사만)
+        # 2) 검색으로 추가 출처 수집
         query = self._build_query(topic, section)
         for item in self._search(query):
             if len(sources) >= MAX_SOURCES:
@@ -64,9 +64,8 @@ class ResearcherAgent:
                 self._log(f"[Agent0] 무관 출처 제외: {doc.title[:40]}")
 
         if not sources:
-            # 관련 출처 없음 — Writer가 자체 지식으로 작성하도록 success=True로 반환
             note = "관련 뉴스 출처를 찾지 못했습니다. Writer가 자체 지식으로 작성합니다."
-            self._log(f"[Agent0] 관련 출처 없음 — Writer 자체 작성으로 진행")
+            self._log("[Agent0] 관련 출처 없음 — Writer 자체 작성으로 진행")
             return ResearchResult(success=True, sources=[], note=note)
 
         self._log(f"[Agent0] 리서치 완료 — 출처 {len(sources)}건 확보")
@@ -86,7 +85,6 @@ class ResearcherAgent:
         base = topic.strip()
         if self._is_korean(base):
             base = self._translate_to_english(base)
-        # section 제외 — "doll society" 같은 무관한 결과 방지
         return base
 
     def _is_korean(self, text: str) -> bool:
@@ -100,8 +98,11 @@ class ResearcherAgent:
                 max_tokens=60,
                 messages=[{
                     "role": "user",
-                    "content": f"Translate this Korean word/phrase to English for a news search query. Reply with only the English translation, no explanation:\n{text}"
-                }]
+                    "content": (
+                        "Translate this Korean word/phrase to English for a news search query. "
+                        "Reply with only the English translation, no explanation:\n" + text
+                    ),
+                }],
             )
             translated = msg.content[0].text.strip()
             self._log(f"[Agent0] 검색어 번역: {text} → {translated}")
@@ -110,30 +111,66 @@ class ResearcherAgent:
             self._log(f"[Agent0] 번역 실패, 원문 사용: {e}")
             return text
 
-    # 교육용으로 적합한 신뢰 도메인
+    def _search(self, query: str) -> list[dict]:
+        """CSE 우선 검색. 실패하거나 키 미설정 시 NewsAPI 폴백."""
+        # ── Google CSE ──────────────────────────────────────────────
+        if GOOGLE_CSE_API_KEY and GOOGLE_CSE_ID:
+            results = self._search_cse(query)
+            if results:
+                return results
+            self._log("[Agent0] CSE 결과 없음 — NewsAPI 폴백")
+        else:
+            self._log("[Agent0] CSE 키 미설정 — NewsAPI 사용")
+
+        # ── NewsAPI 폴백 ─────────────────────────────────────────────
+        return self._search_newsapi(query)
+
+    def _search_cse(self, query: str) -> list[dict]:
+        try:
+            self._log(f"[Agent0] Google CSE 검색: {query}")
+            resp = requests.get(
+                CSE_URL,
+                params={
+                    "key": GOOGLE_CSE_API_KEY,
+                    "cx": GOOGLE_CSE_ID,
+                    "q": query,
+                    "num": MAX_SOURCES + 2,
+                },
+                timeout=10,
+            )
+            if resp.status_code >= 400:
+                self._log(f"[Agent0] CSE 오류 ({resp.status_code}): {resp.text[:200]}")
+                return []
+            items = resp.json().get("items", [])
+            results = [{"url": it["link"], "title": it.get("title", "")}
+                       for it in items if it.get("link")]
+            self._log(f"[Agent0] CSE 결과 {len(results)}건")
+            return results
+        except Exception as e:
+            self._log(f"[Agent0] CSE 오류 (무시하고 계속): {e}")
+            return []
+
+    # 교육용 신뢰 도메인 (NewsAPI 폴백 시 우선 적용)
     _SAFE_DOMAINS = (
         "bbc.com,reuters.com,apnews.com,nationalgeographic.com,"
         "smithsonianmag.com,sciencenews.org,newscientist.com,"
         "theguardian.com,npr.org,time.com,scientificamerican.com"
     )
 
-    def _search(self, query: str) -> list[dict]:
-        """제목 관련성 사전 필터링된 {url, title} 목록 반환."""
+    def _search_newsapi(self, query: str) -> list[dict]:
         if not NEWSAPI_KEY:
             self._log("[Agent0] NEWSAPI_KEY 미설정")
             return []
         try:
-            self._log("[Agent0] GSE 검색 차단으로 newsapi.org로 변경")
+            self._log(f"[Agent0] NewsAPI 검색: {query}")
             candidates = self._fetch_newsapi(query, domains=self._SAFE_DOMAINS)
             relevant = self._title_filter(candidates, query)
-            self._log(f"[Agent0] 교육 도메인 검색: {len(candidates)}건 → 제목 필터 후 {len(relevant)}건")
+            self._log(f"[Agent0] NewsAPI 교육 도메인: {len(candidates)}건 → 제목 필터 후 {len(relevant)}건")
 
-            # 도메인 제한 결과가 부족하면 전체 도메인으로 재시도 (제목 필터 적용)
             if len(relevant) < 2:
                 all_candidates = self._fetch_newsapi(query, domains=None)
                 all_relevant = self._title_filter(all_candidates, query)
-                self._log(f"[Agent0] 전체 도메인 재시도: {len(all_candidates)}건 → 제목 필터 후 {len(all_relevant)}건")
-                # 기존 결과 + 추가분 합치되 중복 제거
+                self._log(f"[Agent0] NewsAPI 전체 도메인 재시도: {len(all_candidates)}건 → {len(all_relevant)}건")
                 seen = {r["url"] for r in relevant}
                 for item in all_relevant:
                     if item["url"] not in seen:
@@ -141,7 +178,7 @@ class ResearcherAgent:
                         seen.add(item["url"])
             return relevant
         except Exception as e:
-            self._log(f"[Agent0] 검색 오류 (무시하고 계속): {e}")
+            self._log(f"[Agent0] NewsAPI 오류 (무시하고 계속): {e}")
             return []
 
     def _fetch_newsapi(self, query: str, domains: str | None) -> list[dict]:
@@ -163,24 +200,17 @@ class ResearcherAgent:
                 for a in articles if a.get("url")]
 
     def _title_filter(self, candidates: list[dict], query: str) -> list[dict]:
-        """제목에 검색어 키워드가 포함된 기사만 통과."""
         keywords = [w.lower() for w in query.split() if len(w) > 2]
         if not keywords:
             return candidates
-        result = []
-        for item in candidates:
-            title_lower = item.get("title", "").lower()
-            if any(kw in title_lower for kw in keywords):
-                result.append(item)
-        return result
+        return [item for item in candidates
+                if any(kw in item.get("title", "").lower() for kw in keywords)]
 
     def _is_relevant(self, doc: SourceDoc, query: str) -> bool:
-        """본문에도 검색어 키워드가 포함되는지 확인 (제목 필터 통과 후 2차 검증)."""
         keywords = [w.lower() for w in query.split() if len(w) > 2]
         if not keywords:
             return True
         combined = (doc.title + " " + doc.text[:800]).lower()
-        # 키워드 중 절반 이상 포함돼야 통과
         matches = sum(1 for kw in keywords if kw in combined)
         return matches >= max(1, len(keywords) // 2)
 
