@@ -297,7 +297,10 @@ def api_health_sheets():
     서비스계정 이메일을 함께 반환하여 어떤 계정을 시트에 공유해야 하는지 알려준다."""
     import json as _json
     from config import GOOGLE_SHEETS_CREDENTIALS_JSON, GOOGLE_SHEET_ID
-    out = {"sheet_id_set": bool((GOOGLE_SHEET_ID or "").strip()),
+    _sid = (GOOGLE_SHEET_ID or "").strip()
+    out = {"sheet_id_set": bool(_sid),
+           "sheet_id": _sid,
+           "sheet_url": (f"https://docs.google.com/spreadsheets/d/{_sid}" if _sid else None),
            "service_account_email": None, "step": None, "ok": False, "error": None}
     try:
         # 1) 자격증명 파싱 + 서비스계정 이메일 추출
