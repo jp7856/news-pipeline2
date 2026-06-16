@@ -286,9 +286,16 @@ def api_publish():
 
 @app.route("/api/usage")
 def api_usage():
-    """누적 토큰 사용량·비용 (서버 기동 이후)."""
+    """이번 달 누적 토큰 사용량·비용."""
     from agents.token_meter import meter
     return jsonify(meter.snapshot())
+
+
+@app.route("/api/usage/monthly")
+def api_usage_monthly():
+    """월별 사용량 집계 (그래프용)."""
+    from agents.token_meter import meter
+    return jsonify(meter.monthly())
 
 
 @app.route("/api/health/sheets")

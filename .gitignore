@@ -26,3 +26,6 @@ Thumbs.db
 # Logs
 *.log
 sheet_backups/
+
+# 런타임 토큰 사용량 영속 파일
+token_usage.json
