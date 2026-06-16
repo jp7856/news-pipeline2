@@ -2,13 +2,14 @@
 
 ## 📋 프로젝트 개요
 
-**NE Times** 영어 교육용(어린이·청소년) 뉴스 파이프라인 시스템입니다. 토픽을 받아 실시간 리서치 기반으로 영어 기사를 작성하고, 검수 게이트를 통과시킨 뒤 번역·이미지·워크북·크로스워드를 생성하여 Google Sheets에 저장합니다. (발행 사이트 게시는 라이브 제품인 v4가 담당 — 아래 설정 참고)
+**NE Times** 영어 교육용(어린이·청소년) 뉴스 파이프라인 시스템입니다. 토픽을 받아 실시간 리서치 기반으로 영어 기사를 작성하고, 검수 게이트를 통과시킨 뒤 번역·이미지·워크북·크로스워드를 생성하여 Google Sheets에 저장합니다. Phase 2 완료 후 **발행하기** 버튼으로 https://jp7856.github.io/ne-times-site/ 에 직접 게시할 수 있습니다.
 
 ### 핵심 목표
 - 📰 레벨·지면별 영어 학습 콘텐츠 자동 생성 (어린이·청소년 대상, 안전성 우선)
 - 🤖 실시간 리서치 + 검수 게이트 기반 파이프라인 오케스트레이션
 - 📊 Google Sheets 저장
 - 🎨 2단계(초안 확인 → 이후 작업) 웹 대시보드
+- 🚀 발행하기 → ne-times-site 즉시 게시
 
 > 본 문서는 2026-06-16 기준 실제 코드와 일치하도록 갱신되었습니다.
 
@@ -61,9 +62,11 @@ GOOGLE_SHEET_ID                 # 저장 대상 스프레드시트 ID
 UNSPLASH_ACCESS_KEY             # Unsplash 이미지 검색
 ```
 
-> ℹ️ **발행 사이트 연동은 v2(d55ca)에 두지 않습니다.** 라이브 제품은 v4(news-pipeline4,
-> web-production-8adb9)이며, 발행 사이트(https://jp7856.github.io/ne-times-site/)는 v4의
-> `/api/published`(구글시트 '발행완료' 행)를 읽어 표시합니다. v2는 콘텐츠 생성·검수용입니다.
+> ℹ️ **v2도 발행 기능을 포함합니다.** Phase 2 완료 후 **🚀 발행하기** 버튼을 누르면
+> `/api/publish`가 호출되어 `_history` 항목에 `published=True`가 기록됩니다.
+> 발행 사이트(https://jp7856.github.io/ne-times-site/)는 **v4(web-production-8adb9)**와
+> **v2(web-production-d55ca)** 두 서버의 `/api/published`를 병렬 fetch하여 최신순 병합합니다.
+> `GITHUB_TOKEN`은 불필요합니다 — 시트 마킹 방식이 아닌 인메모리 `_history` 기반입니다.
 
 > ⚠️ **Google CSE(GOOGLE_CSE_API_KEY/ID)는 폐기**되었습니다. GCP 프로젝트 권한 문제(403)로
 > 동작하지 않아 **Serper.dev + NewsAPI**로 대체했습니다. 리서치는 어린이 교육에 적합한
@@ -170,8 +173,10 @@ Agent 0 리서치 → Writer 2버전(생동감형/레벨엄수형)
 GET  /                    # 대시보드 UI
 POST /api/run             # Phase 1 실행 (초안) → draft_done
 POST /api/stop            # 실행 중 협조적 취소 (러닝 배지 클릭)
-POST /api/regenerate      # Phase 2: 확정 본문으로 재생성+번역+이미지+시트
+POST /api/regenerate      # Phase 2: 확정 본문으로 재생성+번역+이미지+시트 → pipeline_done (idx 포함)
 POST /api/revise          # AI 어시스턴트: 수정 지시(본문 갱신) 또는 질문(답변)
+POST /api/publish         # 발행: {idx} → _history[idx].result.published = True
+GET  /api/published       # 발행된 기사 목록 (CORS: *) — ne-times-site가 읽어감
 GET  /api/usage           # 이번 달 누적 토큰·비용
 GET  /api/usage/monthly   # 월별 사용량 집계 (그래프용)
 GET  /api/health          # 환경변수 설정 여부
@@ -189,18 +194,24 @@ GET  /api/history/<idx>   # 단건 이력
 2. 초안 + 하단 **체크포인트 배너**: `이후 작업 진행 ▶` / `취소` / **AI 수정**(수정·질문, 로그 기록)
 3. 기사 본문 **직접 편집(contenteditable)** 가능, **버전 토글**(P2-2), **교정 제안 적용/거부**(P2-3)
 4. 탭: Article · 한국어 · Plagiarism · Editing · Crossword · Workbook · 이미지 V1 · 이미지 V2 · **검수**(Agent 5 결과)
-5. Phase 2 완료 후 **📊 시트 열기** 노출
-6. 러닝 배지: 진행 중 hover 시 빨강 + 클릭하여 중단
-7. 헤더 우측 **이번 달 누적 사용량** 클릭 → 월별 사용량 그래프(매월 1일 초기화 후 누적)
+5. Phase 2 완료 후 **📊 시트 열기** + **🚀 발행하기** 노출
+6. 발행하기 클릭 → 확인 다이얼로그 → `/api/publish` 호출 → ne-times-site 즉시 반영
+7. 러닝 배지: 진행 중 hover 시 빨강 + 클릭하여 중단
+8. 헤더 우측 **이번 달 누적 사용량** 클릭 → 월별 사용량 그래프(매월 1일 초기화 후 누적)
 
 ---
 
-## 📰 발행 사이트 (참고 — v4 담당)
+## 📰 발행 사이트
 
-발행 사이트 https://jp7856.github.io/ne-times-site/ 는 **v4(news-pipeline4,
-web-production-8adb9)**의 `/api/published`를 읽어 표시합니다. v4에서 **발행하기**를 누르면
-해당 기사의 구글시트 상태가 **'발행완료'**로 기록되고, 사이트가 그 행을 노출합니다.
-**v2(이 프로젝트)는 발행 기능을 포함하지 않습니다** — 콘텐츠 생성·검수 전용입니다.
+발행 사이트 https://jp7856.github.io/ne-times-site/ 는 **v4(web-production-8adb9)**와
+**v2(web-production-d55ca)** 두 서버의 `/api/published`를 병렬 fetch하여 `created_at` 기준
+최신순 병합 표시합니다.
+
+- **v2 발행 흐름**: Phase 2 완료 → 🚀 발행하기 클릭 → `POST /api/publish {idx}` →
+  `_history[idx].result.published = True` → `GET /api/published`에 노출 → 사이트 반영
+- **v4 발행 흐름**: WorksheetAgent.mark_published() → 구글시트 '발행완료' 기록 → `/api/published`
+- **인메모리 주의**: v2의 발행 상태는 `_history`(인메모리)에만 있어 Railway 재시작 시 초기화됩니다.
+  토큰 데이터는 구글 시트 `token_usage` 탭에 영속화되지만, 발행 목록은 현재 재시작 시 리셋됩니다.
 
 ---
 
@@ -217,12 +228,13 @@ python dashboard/app.py        # http://localhost:5000
 # master 푸시 시 자동 재배포
 # Variables(필수): ANTHROPIC_API_KEY, SERPER_API_KEY, NEWSAPI_KEY,
 #   GOOGLE_SHEETS_CREDENTIALS_JSON(JSON 전체), GOOGLE_SHEET_ID,
-#   UNSPLASH_ACCESS_KEY, GITHUB_TOKEN
+#   UNSPLASH_ACCESS_KEY
 # 배포 URL(v2): web-production-d55ca.up.railway.app
 ```
 
 > Railway 디스크는 임시이므로 `sheet_backups/` CSV는 재배포 시 사라집니다.
-> 영구 보관은 Google Sheets 저장 성공이 전제입니다(서비스계정을 시트에 편집자로 공유).
+> **토큰 사용량**은 구글 시트 `token_usage` 탭(A1 셀 JSON)에 자동 백업되어 재시작 후 복원됩니다.
+> 서비스계정(news-repoter@ne-times-pipeline.iam.gserviceaccount.com)을 시트 편집자로 공유 필수.
 
 ---
 
@@ -232,10 +244,10 @@ python dashboard/app.py        # http://localhost:5000
 |---|---|
 | AI 모델 | Anthropic claude-sonnet-4-6 |
 | 웹 | Flask, Flask-SocketIO |
-| 외부 API | Serper.dev, NewsAPI, Unsplash, Google Sheets, GitHub Contents API |
+| 외부 API | Serper.dev, NewsAPI, Unsplash, Google Sheets |
 | 인증/처리 | google-auth, gspread, BeautifulSoup4, lxml, requests |
 | 배포 | Railway (Procfile, GitHub 자동 배포) |
 
 ---
 
-마지막 수정: 2026년 6월 16일 (현재 아키텍처 일괄 반영 — 2단계 파이프라인, Serper/NewsAPI 리서치, 검수 게이트 정규화, 발행 연동)
+마지막 수정: 2026년 6월 16일 (현재 아키텍처 일괄 반영 — 2단계 파이프라인, Serper/NewsAPI 리서치, 검수 게이트 정규화, v2 발행 기능 추가, 토큰 구글시트 영속화)
