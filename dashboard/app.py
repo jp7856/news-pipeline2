@@ -339,6 +339,7 @@ def api_health():
     keys = [
         "ANTHROPIC_API_KEY", "SERPER_API_KEY", "NEWSAPI_KEY",
         "GOOGLE_SHEETS_CREDENTIALS_JSON", "GOOGLE_SHEET_ID", "UNSPLASH_ACCESS_KEY",
+        "GITHUB_TOKEN",
     ]
     status = {k: bool(os.getenv(k, "").strip()) for k in keys}
     return jsonify({
@@ -346,6 +347,7 @@ def api_health():
         "env": status,
         "research_ready": status["SERPER_API_KEY"] or status["NEWSAPI_KEY"],
         "sheets_ready": status["GOOGLE_SHEETS_CREDENTIALS_JSON"] and status["GOOGLE_SHEET_ID"],
+        "publish_ready": status["GITHUB_TOKEN"],
     })
 
 
