@@ -14,7 +14,7 @@ import anthropic
 
 from config import CLAUDE_MODEL, SYSTEM_PROMPT, LEVEL_CONFIG, WORKBOOK_FORMATS
 from models import ArticleResult, WorkbookSet, WorkbookActivity, Level
-from agents.sub_agents.utils import parse_json
+from agents.sub_agents.utils import parse_json_loose as parse_json
 
 logger = logging.getLogger(__name__)
 

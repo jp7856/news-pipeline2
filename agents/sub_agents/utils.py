@@ -83,6 +83,15 @@ def _extract_fields_regex(raw: str) -> dict:
     return result
 
 
+def parse_json_loose(raw: str) -> dict:
+    """parse_json과 동일하지만 5차 시도에서 article 미발견 시 에러 대신 빈 dict 반환.
+    워크북·크로스워드 등 article 구조가 없는 응답에 사용."""
+    try:
+        return parse_json(raw)
+    except ValueError:
+        return {}
+
+
 def _fix_inner_quotes(raw: str) -> str:
     """JSON 문자열 값 내부의 이스케이프 안 된 큰따옴표를 단따옴표로 바꾼다."""
     result = []
