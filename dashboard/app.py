@@ -294,7 +294,7 @@ def api_publish():
 
 @app.route("/api/published")
 def api_published():
-    """발행된 기사 목록 — ne-times-site-v2에서 읽어가는 엔드포인트."""
+    """발행된 기사 목록 — ne-times-site에서 읽어가는 엔드포인트."""
     published = [
         {
             "created_at": e["created_at"],
@@ -307,7 +307,9 @@ def api_published():
         for e in _history
         if e.get("result", {}).get("published")
     ]
-    return jsonify(published)
+    resp = jsonify(published)
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    return resp
 
 
 @app.route("/api/history")
