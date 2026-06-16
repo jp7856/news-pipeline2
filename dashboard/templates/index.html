@@ -194,6 +194,10 @@
          style="padding:10px 20px;background:#166534;color:#4ade80;border-radius:8px;font-size:.9rem;font-weight:500;text-decoration:none">
         📊 시트 열기
       </a>
+      <button id="btn-publish" class="hidden" onclick="publishArticle()"
+         style="padding:10px 20px;background:#7c3aed;color:#fff;border:none;border-radius:8px;font-size:.9rem;font-weight:500;cursor:pointer">
+        🚀 발행하기
+      </button>
     </div>
 
     <!-- Log -->
@@ -366,13 +370,49 @@
       openDraftBar();
     });
 
-    socket.on("pipeline_done", ({result, usage}) => {
+    let _publishIdx = null;
+
+    socket.on("pipeline_done", ({result, usage, idx}) => {
       _clientRunning = false;
       setRunning(false);
       renderResult(result);
       renderUsage(usage);
       closeDraftBar();
+      // 발행 버튼 표시
+      if (idx !== undefined && idx !== null) {
+        _publishIdx = idx;
+        document.getElementById("btn-publish").classList.remove("hidden");
+      }
     });
+
+    async function publishArticle() {
+      if (_publishIdx === null) return;
+      if (!confirm("이 기사를 ne-times-site-v2에 발행하시겠습니까?")) return;
+      const btn = document.getElementById("btn-publish");
+      btn.disabled = true;
+      btn.textContent = "발행 중...";
+      try {
+        const resp = await fetch("/api/publish", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({ idx: _publishIdx }),
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+          btn.textContent = "✅ 발행 완료";
+          btn.style.background = "#166534";
+          btn.onclick = null;
+        } else {
+          btn.textContent = "🚀 발행하기";
+          btn.disabled = false;
+          alert("발행 실패: " + (data.error || "알 수 없는 오류"));
+        }
+      } catch (e) {
+        btn.textContent = "🚀 발행하기";
+        btn.disabled = false;
+        alert("발행 실패: " + e.message);
+      }
+    }
 
     socket.on("pipeline_error", ({error}) => {
       _clientRunning = false;

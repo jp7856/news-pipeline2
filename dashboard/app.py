@@ -140,14 +140,15 @@ def api_regenerate():
                 topic, level, section, final_text, page=page, sources=sources
             )
             result = _serialize(pkg, sheet_url)
+            hist_idx = len(_history)
             _history.append({
-                "idx": len(_history),
+                "idx": hist_idx,
                 "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
                 "topic": topic, "level": level.value, "section": section.value,
                 "result": result,
             })
             from agents.token_meter import meter
-            socketio.emit("pipeline_done", {"result": result, "usage": meter.snapshot()}, to=sid)
+            socketio.emit("pipeline_done", {"result": result, "usage": meter.snapshot(), "idx": hist_idx}, to=sid)
         except PipelineCancelled:
             socketio.emit("pipeline_stopped", {}, to=sid)
         except Exception as e:
@@ -278,6 +279,35 @@ def api_health():
         "research_ready": status["SERPER_API_KEY"] or status["NEWSAPI_KEY"],
         "sheets_ready": status["GOOGLE_SHEETS_CREDENTIALS_JSON"] and status["GOOGLE_SHEET_ID"],
     })
+
+
+@app.route("/api/publish", methods=["POST"])
+def api_publish():
+    """기사 발행 — _history 항목에 published=True 표시."""
+    data = request.json or {}
+    idx = data.get("idx")
+    if idx is None or not (0 <= int(idx) < len(_history)):
+        return jsonify({"error": "Invalid idx"}), 400
+    _history[int(idx)]["result"]["published"] = True
+    return jsonify({"message": "Published"})
+
+
+@app.route("/api/published")
+def api_published():
+    """발행된 기사 목록 — ne-times-site-v2에서 읽어가는 엔드포인트."""
+    published = [
+        {
+            "created_at": e["created_at"],
+            "topic": e["topic"],
+            "level": e["level"],
+            "section": e["section"],
+            "article": e["result"]["article"],
+            "image_url": e["result"].get("image_url", ""),
+        }
+        for e in _history
+        if e.get("result", {}).get("published")
+    ]
+    return jsonify(published)
 
 
 @app.route("/api/history")
