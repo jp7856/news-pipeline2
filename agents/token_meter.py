@@ -37,20 +37,75 @@ class TokenMeter:
         return {"calls": 0, "input_tokens": 0, "output_tokens": 0,
                 "cache_write_tokens": 0, "cache_read_tokens": 0}
 
+    # ------------------------------------------------------------------
+    # Google Sheets 영속화 (Railway ephemeral 파일시스템 대응)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _get_token_sheet():
+        """'token_usage' 탭 반환 — 없으면 생성."""
+        import json as _json
+        from config import GOOGLE_SHEETS_CREDENTIALS_JSON, GOOGLE_SHEET_ID
+        import gspread
+        from google.oauth2.service_account import Credentials
+        SCOPES = ["https://www.googleapis.com/auth/spreadsheets",
+                  "https://www.googleapis.com/auth/drive"]
+        creds_val = (GOOGLE_SHEETS_CREDENTIALS_JSON or "").strip()
+        if creds_val.startswith("{"):
+            info = _json.loads(creds_val)
+        else:
+            from pathlib import Path as _P
+            info = _json.loads(_P(creds_val).read_text(encoding="utf-8"))
+        creds = Credentials.from_service_account_info(info, scopes=SCOPES)
+        gc = gspread.authorize(creds)
+        ss = gc.open_by_key(GOOGLE_SHEET_ID)
+        try:
+            return ss.worksheet("token_usage")
+        except gspread.exceptions.WorksheetNotFound:
+            ws = ss.add_worksheet(title="token_usage", rows=2, cols=1)
+            ws.update("A1", [["{}"]],value_input_option="RAW")
+            return ws
+
+    def _load_from_sheets(self) -> dict:
+        ws = self._get_token_sheet()
+        raw = ws.acell("A1").value or "{}"
+        data = json.loads(raw)
+        return data if isinstance(data, dict) else {}
+
+    def _save_to_sheets(self) -> None:
+        ws = self._get_token_sheet()
+        ws.update("A1", [[json.dumps(self._months, ensure_ascii=False)]],
+                  value_input_option="RAW")
+
+    # ------------------------------------------------------------------
+
     def _load(self) -> None:
+        # 1) 로컬 파일 우선
         try:
             if USAGE_FILE.exists():
                 data = json.loads(USAGE_FILE.read_text(encoding="utf-8"))
-                if isinstance(data, dict):
+                if isinstance(data, dict) and data:
                     self._months = data
+                    return
+        except Exception:
+            pass
+        # 2) 로컬 없으면 구글 시트에서 복원
+        try:
+            self._months = self._load_from_sheets()
         except Exception:
             self._months = {}
 
     def _save(self) -> None:
+        # 로컬 파일
         try:
             USAGE_FILE.write_text(
                 json.dumps(self._months, ensure_ascii=False, indent=1), encoding="utf-8"
             )
+        except Exception:
+            pass
+        # 구글 시트 백업 (best-effort)
+        try:
+            self._save_to_sheets()
         except Exception:
             pass
 
