@@ -2,12 +2,12 @@
 
 ## 📋 프로젝트 개요
 
-**NE Times** 영어 교육용(어린이·청소년) 뉴스 파이프라인 시스템입니다. 토픽을 받아 실시간 리서치 기반으로 영어 기사를 작성하고, 검수 게이트를 통과시킨 뒤 번역·이미지·워크북·크로스워드를 생성하여 Google Sheets에 저장하고, 최종적으로 발행 사이트(GitHub Pages)에 게시합니다.
+**NE Times** 영어 교육용(어린이·청소년) 뉴스 파이프라인 시스템입니다. 토픽을 받아 실시간 리서치 기반으로 영어 기사를 작성하고, 검수 게이트를 통과시킨 뒤 번역·이미지·워크북·크로스워드를 생성하여 Google Sheets에 저장합니다. (발행 사이트 게시는 라이브 제품인 v4가 담당 — 아래 설정 참고)
 
 ### 핵심 목표
 - 📰 레벨·지면별 영어 학습 콘텐츠 자동 생성 (어린이·청소년 대상, 안전성 우선)
 - 🤖 실시간 리서치 + 검수 게이트 기반 파이프라인 오케스트레이션
-- 📊 Google Sheets 저장 + GitHub Pages 발행
+- 📊 Google Sheets 저장
 - 🎨 2단계(초안 확인 → 이후 작업) 웹 대시보드
 
 > 본 문서는 2026-06-16 기준 실제 코드와 일치하도록 갱신되었습니다.
@@ -59,9 +59,11 @@ NEWSAPI_KEY                     # NewsAPI.org — 리서치 폴백
 GOOGLE_SHEETS_CREDENTIALS_JSON  # 서비스계정 JSON "전체 내용"(문자열) — 파일 경로 아님
 GOOGLE_SHEET_ID                 # 저장 대상 스프레드시트 ID
 UNSPLASH_ACCESS_KEY             # Unsplash 이미지 검색
-GITHUB_TOKEN                    # 발행용 — ne-times-site 레포 contents 쓰기 권한
-GITHUB_SITE_REPO                # 기본값 "jp7856/ne-times-site"
 ```
+
+> ℹ️ **발행 사이트 연동은 v2(d55ca)에 두지 않습니다.** 라이브 제품은 v4(news-pipeline4,
+> web-production-8adb9)이며, 발행 사이트(https://jp7856.github.io/ne-times-site/)는 v4의
+> `/api/published`(구글시트 '발행완료' 행)를 읽어 표시합니다. v2는 콘텐츠 생성·검수용입니다.
 
 > ⚠️ **Google CSE(GOOGLE_CSE_API_KEY/ID)는 폐기**되었습니다. GCP 프로젝트 권한 문제(403)로
 > 동작하지 않아 **Serper.dev + NewsAPI**로 대체했습니다. 리서치는 어린이 교육에 적합한
@@ -170,8 +172,8 @@ POST /api/run             # Phase 1 실행 (초안) → draft_done
 POST /api/stop            # 실행 중 협조적 취소 (러닝 배지 클릭)
 POST /api/regenerate      # Phase 2: 확정 본문으로 재생성+번역+이미지+시트
 POST /api/revise          # AI 어시스턴트: 수정 지시(본문 갱신) 또는 질문(답변)
-POST /api/publish         # 발행: ne-times-site/articles.json에 커밋
-GET  /api/usage           # 누적 토큰·비용
+GET  /api/usage           # 이번 달 누적 토큰·비용
+GET  /api/usage/monthly   # 월별 사용량 집계 (그래프용)
 GET  /api/health          # 환경변수 설정 여부
 GET  /api/health/sheets   # 구글시트 실연결 진단 + 서비스계정 이메일 보고
 GET  /api/history         # 생성 이력
@@ -187,18 +189,18 @@ GET  /api/history/<idx>   # 단건 이력
 2. 초안 + 하단 **체크포인트 배너**: `이후 작업 진행 ▶` / `취소` / **AI 수정**(수정·질문, 로그 기록)
 3. 기사 본문 **직접 편집(contenteditable)** 가능, **버전 토글**(P2-2), **교정 제안 적용/거부**(P2-3)
 4. 탭: Article · 한국어 · Plagiarism · Editing · Crossword · Workbook · 이미지 V1 · 이미지 V2 · **검수**(Agent 5 결과)
-5. Phase 2 완료 후 **📊 시트 열기** + **📰 발행하기** 노출
+5. Phase 2 완료 후 **📊 시트 열기** 노출
 6. 러닝 배지: 진행 중 hover 시 빨강 + 클릭하여 중단
+7. 헤더 우측 **이번 달 누적 사용량** 클릭 → 월별 사용량 그래프(매월 1일 초기화 후 누적)
 
 ---
 
-## 📰 발행 (GitHub Pages 연동)
+## 📰 발행 사이트 (참고 — v4 담당)
 
-- **사이트:** https://jp7856.github.io/ne-times-site/ (레포 `jp7856/ne-times-site`)
-- 사이트는 레포의 **정적 `articles.json`**을 직접 fetch하여 렌더 (별도 서버 불필요)
-- 대시보드 **발행하기** → `/api/publish` → GitHub Contents API로 `articles.json`에 기사 append 커밋
-- 검수 미통과(NEEDS_REVIEW) 기사는 발행 전 확인창 표시 (교육용 안전장치)
-- `GITHUB_TOKEN`(ne-times-site contents 쓰기 권한) 필요
+발행 사이트 https://jp7856.github.io/ne-times-site/ 는 **v4(news-pipeline4,
+web-production-8adb9)**의 `/api/published`를 읽어 표시합니다. v4에서 **발행하기**를 누르면
+해당 기사의 구글시트 상태가 **'발행완료'**로 기록되고, 사이트가 그 행을 노출합니다.
+**v2(이 프로젝트)는 발행 기능을 포함하지 않습니다** — 콘텐츠 생성·검수 전용입니다.
 
 ---
 

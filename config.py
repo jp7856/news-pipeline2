@@ -21,10 +21,6 @@ GOOGLE_CSE_API_KEY = os.getenv("GOOGLE_CSE_API_KEY", "")
 GOOGLE_CSE_ID = os.getenv("GOOGLE_CSE_ID", "")
 SERPER_API_KEY = os.getenv("SERPER_API_KEY", "")
 NEWSAPI_KEY = os.getenv("NEWSAPI_KEY", "")
-
-# 발행 사이트(GitHub Pages) 연동 — ne-times-site 레포 articles.json에 커밋
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
-GITHUB_SITE_REPO = os.getenv("GITHUB_SITE_REPO", "jp7856/ne-times-site")
 UNSPLASH_ACCESS_KEY = os.getenv("UNSPLASH_ACCESS_KEY", "VLRkU7wWplDXzMjkBFFqvhVrR_orC10qFcHOApNkrTc")
 
 MAX_ARTICLES_PER_RUN = int(os.getenv("MAX_ARTICLES_PER_RUN", "10"))
