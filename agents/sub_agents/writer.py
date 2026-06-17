@@ -223,4 +223,10 @@ Respond in this exact JSON format (no double quotes inside values):
             system=[{"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
             messages=[{"role": "user", "content": prompt}],
         )
-        return parse_json(message.content[0].text)
+        raw = message.content[0].text
+        try:
+            return parse_json(raw)
+        except (ValueError, Exception):
+            # Claude가 JSON 대신 평문 기사를 반환한 경우 — article로 간주
+            self._log("[Writer] JSON 파싱 실패 → 평문 응답을 article로 간주")
+            return {"article": raw.strip(), "vocabulary": [], "sources": []}
