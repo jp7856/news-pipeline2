@@ -365,31 +365,26 @@ def api_publish():
 @app.route("/api/published")
 def api_published():
     """발행된 기사 목록 — ne-times-site에서 읽어가는 엔드포인트.
-    인메모리 _history 발행 항목 + Sheets 영속 목록을 병합하여 반환."""
-    # 인메모리 발행 항목 수집
-    mem_keys = set()
-    mem_list = []
+    Sheets를 매번 읽어 삭제/추가가 즉시 반영되도록 한다."""
+    # Sheets 최신 상태 읽기
+    sheets_list = _load_published_from_sheets()
+    sheets_keys = {(a.get("created_at", ""), a.get("topic", "")) for a in sheets_list}
+
+    # 인메모리 발행 항목 중 Sheets에 없는 것만 추가 (이번 세션에서 새로 발행한 것)
     for e in _history:
         if e.get("result", {}).get("published"):
-            item = {
-                "created_at": e["created_at"],
-                "topic": e["topic"],
-                "level": e["level"],
-                "section": e["section"],
-                "article": e["result"]["article"],
-                "image_url": e["result"].get("image_url", ""),
-            }
             k = (e.get("created_at", ""), e.get("topic", ""))
-            mem_keys.add(k)
-            mem_list.append(item)
+            if k not in sheets_keys:
+                sheets_list.insert(0, {
+                    "created_at": e["created_at"],
+                    "topic": e["topic"],
+                    "level": e["level"],
+                    "section": e["section"],
+                    "article": e["result"]["article"],
+                    "image_url": e["result"].get("image_url", ""),
+                })
 
-    # Sheets 영속 목록에서 인메모리에 없는 항목 추가
-    extra = [
-        a for a in _published_articles
-        if (a.get("created_at", ""), a.get("topic", "")) not in mem_keys
-    ]
-    merged = mem_list + extra
-    resp = jsonify(merged)
+    resp = jsonify(sheets_list)
     resp.headers["Access-Control-Allow-Origin"] = "*"
     return resp
 
