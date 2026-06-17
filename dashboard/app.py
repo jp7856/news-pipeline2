@@ -37,6 +37,56 @@ _cancel: dict[str, bool] = {}
 # 전체 히스토리 (모두 보기용)
 _history: list[dict] = []
 
+# 영속 발행 목록 (Railway 재시작 후에도 유지 — Google Sheets 백업)
+_published_articles: list[dict] = []
+
+
+def _get_published_sheet():
+    """'published_v2' 탭 반환 — 없으면 생성."""
+    import json as _json
+    from config import GOOGLE_SHEETS_CREDENTIALS_JSON, GOOGLE_SHEET_ID
+    import gspread
+    from google.oauth2.service_account import Credentials
+    scopes = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+    creds_val = (GOOGLE_SHEETS_CREDENTIALS_JSON or "").strip()
+    creds = Credentials.from_service_account_info(_json.loads(creds_val), scopes=scopes)
+    gc = gspread.authorize(creds)
+    wb = gc.open_by_key(GOOGLE_SHEET_ID)
+    try:
+        return wb.worksheet("published_v2")
+    except gspread.exceptions.WorksheetNotFound:
+        ws = wb.add_worksheet("published_v2", rows=1, cols=1)
+        ws.update("A1", [[_json.dumps([], ensure_ascii=False)]], value_input_option="RAW")
+        return ws
+
+
+def _load_published_from_sheets() -> list[dict]:
+    import json as _json
+    try:
+        ws = _get_published_sheet()
+        raw = ws.acell("A1").value or "[]"
+        return _json.loads(raw)
+    except Exception as e:
+        logger.warning(f"[Published] Sheets 로드 실패 (무시): {e}")
+        return []
+
+
+def _save_published_to_sheets(articles: list[dict]) -> None:
+    import json as _json
+    try:
+        ws = _get_published_sheet()
+        ws.update("A1", [[_json.dumps(articles, ensure_ascii=False)]], value_input_option="RAW")
+    except Exception as e:
+        logger.warning(f"[Published] Sheets 저장 실패 (무시): {e}")
+
+
+# 앱 시작 시 기존 발행 기사 복원
+try:
+    _published_articles = _load_published_from_sheets()
+    logger.info(f"[Published] Sheets에서 {len(_published_articles)}건 복원")
+except Exception as _e:
+    logger.warning(f"[Published] 초기 로드 실패 (무시): {_e}")
+
 
 class PipelineCancelled(Exception):
     """사용자가 실행 중 파이프라인을 중단했을 때 발생."""
@@ -283,31 +333,63 @@ def api_health():
 
 @app.route("/api/publish", methods=["POST"])
 def api_publish():
-    """기사 발행 — _history 항목에 published=True 표시."""
+    """기사 발행 — _history 항목에 published=True 표시 + Sheets 영속화."""
     data = request.json or {}
     idx = data.get("idx")
     if idx is None or not (0 <= int(idx) < len(_history)):
         return jsonify({"error": "Invalid idx"}), 400
-    _history[int(idx)]["result"]["published"] = True
+    entry = _history[int(idx)]
+    entry["result"]["published"] = True
+
+    # 영속 목록에 추가 (중복 방지: created_at+topic 기준)
+    key = (entry.get("created_at", ""), entry.get("topic", ""))
+    already = any(
+        (a.get("created_at", ""), a.get("topic", "")) == key
+        for a in _published_articles
+    )
+    if not already:
+        article_entry = {
+            "created_at": entry["created_at"],
+            "topic": entry["topic"],
+            "level": entry["level"],
+            "section": entry["section"],
+            "article": entry["result"]["article"],
+            "image_url": entry["result"].get("image_url", ""),
+        }
+        _published_articles.insert(0, article_entry)
+        _save_published_to_sheets(_published_articles)
+
     return jsonify({"message": "Published"})
 
 
 @app.route("/api/published")
 def api_published():
-    """발행된 기사 목록 — ne-times-site에서 읽어가는 엔드포인트."""
-    published = [
-        {
-            "created_at": e["created_at"],
-            "topic": e["topic"],
-            "level": e["level"],
-            "section": e["section"],
-            "article": e["result"]["article"],
-            "image_url": e["result"].get("image_url", ""),
-        }
-        for e in _history
-        if e.get("result", {}).get("published")
+    """발행된 기사 목록 — ne-times-site에서 읽어가는 엔드포인트.
+    인메모리 _history 발행 항목 + Sheets 영속 목록을 병합하여 반환."""
+    # 인메모리 발행 항목 수집
+    mem_keys = set()
+    mem_list = []
+    for e in _history:
+        if e.get("result", {}).get("published"):
+            item = {
+                "created_at": e["created_at"],
+                "topic": e["topic"],
+                "level": e["level"],
+                "section": e["section"],
+                "article": e["result"]["article"],
+                "image_url": e["result"].get("image_url", ""),
+            }
+            k = (e.get("created_at", ""), e.get("topic", ""))
+            mem_keys.add(k)
+            mem_list.append(item)
+
+    # Sheets 영속 목록에서 인메모리에 없는 항목 추가
+    extra = [
+        a for a in _published_articles
+        if (a.get("created_at", ""), a.get("topic", "")) not in mem_keys
     ]
-    resp = jsonify(published)
+    merged = mem_list + extra
+    resp = jsonify(merged)
     resp.headers["Access-Control-Allow-Origin"] = "*"
     return resp
 
