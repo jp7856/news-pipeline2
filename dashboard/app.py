@@ -331,6 +331,31 @@ def api_health():
     })
 
 
+@app.route("/api/unpublish", methods=["POST"])
+def api_unpublish():
+    """발행 취소 — created_at+topic 기준으로 _published_articles에서 제거 후 Sheets 저장."""
+    data = request.json or {}
+    created_at = data.get("created_at", "")
+    topic = data.get("topic", "")
+    if not created_at and not topic:
+        return jsonify({"error": "created_at 또는 topic 필요"}), 400
+
+    # 인메모리 _history 발행 취소
+    for e in _history:
+        if e.get("created_at") == created_at and e.get("topic") == topic:
+            e.get("result", {}).pop("published", None)
+
+    # 영속 목록에서 제거
+    before = len(_published_articles)
+    _published_articles[:] = [
+        a for a in _published_articles
+        if not (a.get("created_at") == created_at and a.get("topic") == topic)
+    ]
+    removed = before - len(_published_articles)
+    _save_published_to_sheets(_published_articles)
+    return jsonify({"message": f"Unpublished ({removed}건 제거)"})
+
+
 @app.route("/api/publish", methods=["POST"])
 def api_publish():
     """기사 발행 — _history 항목에 published=True 표시 + Sheets 영속화."""
