@@ -81,13 +81,11 @@ class ResearcherAgent:
         "비즈니스": "business", "사람": "people",
     }
 
-    # 교육용 사이트 한정 site: 쿼리
+    # 교육용 사이트 한정 site: 쿼리 (최후 폴백용으로만 유지)
     _EDU_SITES = (
-        "site:nationalgeographic.com OR site:kids.nationalgeographic.com "
-        "OR site:smithsonianmag.com OR site:sciencenewsforstudents.org "
-        "OR site:bbcearth.com OR site:bbc.co.uk/bitesize "
-        "OR site:dkfindout.com OR site:britannica.com "
-        "OR site:kidshealth.org OR site:amnh.org"
+        "site:nationalgeographic.com OR site:smithsonianmag.com "
+        "OR site:sciencenewsforstudents.org OR site:britannica.com "
+        "OR site:bbc.co.uk/bitesize OR site:kidshealth.org"
     )
 
     def _build_query(self, topic: str, section: str) -> str:
@@ -141,17 +139,17 @@ class ResearcherAgent:
 
     def _search_serper(self, query: str) -> list[dict]:
         try:
-            # 1차: 교육 사이트 한정 웹 검색
-            edu_query = f"{query} {self._EDU_SITES}"
-            self._log(f"[Agent0] Serper 교육사이트 검색: {query}")
-            results = self._serper_web(edu_query)
-            self._log(f"[Agent0] 교육사이트 결과 {len(results)}건")
+            # 1차: 일반 웹 검색 + 교육 키워드 (다양한 출처 확보)
+            general_query = f"{query} facts for students"
+            self._log(f"[Agent0] Serper 일반 교육 검색: {query}")
+            results = self._serper_web(general_query)
+            self._log(f"[Agent0] 일반 검색 결과 {len(results)}건")
 
-            # 2차: 결과 부족 시 일반 웹 검색 (교육 키워드 추가, 쇼핑 제외)
+            # 2차: 결과 부족 시 교육 사이트 한정 검색으로 보완
             if len(results) < 2:
-                fallback_query = f"{query} explained facts for students"
-                self._log(f"[Agent0] 일반 교육 검색으로 재시도: {fallback_query}")
-                extra = self._serper_web(fallback_query)
+                edu_query = f"{query} {self._EDU_SITES}"
+                self._log(f"[Agent0] 교육사이트 한정 검색으로 재시도: {query}")
+                extra = self._serper_web(edu_query)
                 seen = {r["url"] for r in results}
                 for item in extra:
                     if item["url"] not in seen:
