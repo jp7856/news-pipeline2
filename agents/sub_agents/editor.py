@@ -6,7 +6,7 @@ from typing import Callable
 
 import anthropic
 
-from config import CLAUDE_MODEL, SYSTEM_PROMPT, LEVEL_CONFIG
+from config import CLAUDE_MODEL_FAST, SYSTEM_PROMPT, LEVEL_CONFIG
 from models import ArticleResult, EditingSuggestion, Level
 from agents.sub_agents.utils import parse_json
 
@@ -73,7 +73,7 @@ If there are no issues, return: {{"suggestions": []}}"""
 
     def _call_claude(self, prompt: str) -> dict:
         message = self._client.messages.create(
-            model=CLAUDE_MODEL,
+            model=CLAUDE_MODEL_FAST,
             max_tokens=1500,
             system=[{"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
             messages=[{"role": "user", "content": prompt}],

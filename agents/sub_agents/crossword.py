@@ -5,7 +5,7 @@ from typing import Callable
 
 import anthropic
 
-from config import CLAUDE_MODEL, SYSTEM_PROMPT
+from config import CLAUDE_MODEL_FAST, SYSTEM_PROMPT
 from models import ArticleResult, CrosswordSentencePair
 from agents.sub_agents.utils import parse_json_loose as parse_json
 
@@ -74,7 +74,7 @@ Respond in this exact JSON format:
 
     def _call_claude(self, prompt: str) -> dict:
         message = self._client.messages.create(
-            model=CLAUDE_MODEL,
+            model=CLAUDE_MODEL_FAST,
             max_tokens=2000,
             system=[{"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
             messages=[{"role": "user", "content": prompt}],

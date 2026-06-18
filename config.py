@@ -5,6 +5,7 @@ load_dotenv(override=True)
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 CLAUDE_MODEL = "claude-sonnet-4-6"
+CLAUDE_MODEL_FAST = "claude-haiku-4-5-20251001"  # 단순 판정용
 
 # ------------------------------------------------------------------
 # 토큰 단가 (USD per 1M tokens) — claude-sonnet-4-6 기준, env로 조정 가능

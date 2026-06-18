@@ -5,7 +5,7 @@ from typing import Callable
 
 import anthropic
 
-from config import ANTHROPIC_API_KEY, CLAUDE_MODEL, SYSTEM_PROMPT
+from config import ANTHROPIC_API_KEY, CLAUDE_MODEL_FAST, SYSTEM_PROMPT
 from models import ArticleResult, PlagiarismReport
 from agents.sub_agents.utils import parse_json
 
@@ -126,7 +126,7 @@ class PlagiarismCheckerAgent:
 
     def _call_claude(self, prompt: str) -> dict:
         message = self._client.messages.create(
-            model=CLAUDE_MODEL,
+            model=CLAUDE_MODEL_FAST,
             max_tokens=1500,
             system=[{"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
             messages=[{"role": "user", "content": prompt}],

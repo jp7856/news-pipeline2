@@ -14,7 +14,7 @@ from typing import Callable
 import anthropic
 import requests
 
-from config import UNSPLASH_ACCESS_KEY, ANTHROPIC_API_KEY, CLAUDE_MODEL
+from config import UNSPLASH_ACCESS_KEY, ANTHROPIC_API_KEY, CLAUDE_MODEL_FAST
 from models import ContentPackage, ImageCandidate
 from agents.sub_agents.utils import parse_json
 from agents.token_meter import make_client
@@ -73,7 +73,7 @@ Respond in this exact JSON format:
 {{"query": "short visual search phrase"}}"""
         try:
             msg = self._client.messages.create(
-                model=CLAUDE_MODEL,
+                model=CLAUDE_MODEL_FAST,
                 max_tokens=120,
                 messages=[{"role": "user", "content": prompt}],
             )
@@ -132,7 +132,7 @@ Respond in this exact JSON format:
 {{"index": 0}}"""
         try:
             msg = self._client.messages.create(
-                model=CLAUDE_MODEL,
+                model=CLAUDE_MODEL_FAST,
                 max_tokens=60,
                 messages=[{"role": "user", "content": prompt}],
             )
